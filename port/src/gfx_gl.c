@@ -341,6 +341,20 @@ static void be_begin_frame(void *user)
     p_glEnable(GL_BLEND);
     p_glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     p_glDisable(GL_CULL_FACE);
+
+    /* Clear colour and depth. Without this each frame composites onto the
+     * last, and -- worse -- stale depth values reject the new frame's
+     * geometry wherever it sits at the same depth as the old, so the picture
+     * simply stops updating. The self-test caught exactly that: a textured
+     * triangle drawn over an identical untextured one produced no visible
+     * change at all.
+     *
+     * The N64 cleared by filling the framebuffer with a rectangle, and the
+     * game still issues that; clearing here as well is cheap and means the
+     * depth buffer is always in a known state. */
+    p_glDisable(GL_SCISSOR_TEST);
+    p_glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    p_glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
 static void be_end_frame(void *user)

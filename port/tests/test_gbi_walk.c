@@ -211,6 +211,43 @@ static void test_nested_and_branch(void)
     CHECK(st.max_depth == 0);
 }
 
+/* Regression: max_commands bounds the top-level list only.
+ *
+ * data_size describes the list the task was handed; sub-lists it calls into
+ * are separate allocations and are not counted in it. Spending the same
+ * budget on nested lists made a frame abort as soon as it called one -- which
+ * GoldenEye's model code does constantly, so nearly every real frame would
+ * have silently lost geometry. Caught by the end-to-end self-test, not by the
+ * unit tests, which is why it is pinned here now. */
+static void test_nested_does_not_consume_top_budget(void)
+{
+    Gfx dl[8];
+    Gfx *p;
+    gbi_stats st;
+
+    printf("walk: a sub-list does not spend the caller's command bound\n");
+
+    gbiResetSegments();
+    gbiSetSegment(1, g_child);
+
+    /* g_child is three commands long. The top-level list is three commands.
+     * Bounding at exactly three must still work, because the sub-list's
+     * commands are not the top-level list's. */
+    p = g_child;
+    gSP1Triangle(p++, 1, 2, 3, 0);
+    gSP1Triangle(p++, 4, 5, 6, 0);
+    gSPEndDisplayList(p++);
+
+    p = dl;
+    gSP1Triangle(p++, 1, 2, 3, 0);
+    gSPDisplayList(p++, 0x01000000u);
+    gSPEndDisplayList(p++);
+
+    CHECK(gbiWalk(dl, 3, &st) == 0);
+    CHECK(st.triangles == 3);
+    CHECK(st.display_lists == 1);
+}
+
 static void test_unresolvable_segment(void)
 {
     Gfx dl[8];
@@ -378,6 +415,7 @@ int main(void)
     test_tri4_padding();
     test_vertices();
     test_nested_and_branch();
+    test_nested_does_not_consume_top_budget();
     test_unresolvable_segment();
     test_depth_limit();
     test_segments();

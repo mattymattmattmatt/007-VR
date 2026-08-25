@@ -2,6 +2,7 @@
 
 #include "platform.h"
 
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -11,6 +12,19 @@
 #  include <sys/mman.h>
 #endif
 
+/* The arena must sit low enough that every address in it carries segment
+ * index 0, the way physical RDRAM does on hardware (0x00000000-0x007fffff).
+ *
+ * Segmented addresses keep their segment number in bits 24-27, so an arena
+ * placed anywhere above 16 MB makes every *direct* pointer in a display list
+ * look like a segment reference. The symptom is brutal and silent: G_VTX
+ * resolves to nothing, no vertices load, and the triangles still get counted
+ * and still issue draw calls -- they are simply all degenerate, so the screen
+ * stays black. The self-test found it exactly that way, by reading pixels back
+ * rather than trusting the counters. */
+#define GEPC_RDRAM_MIN_BASE 0x00100000u   /* clear of vm.mmap_min_addr */
+#define GEPC_RDRAM_MAX_END  0x01000000u   /* 16 MB: keeps segment index 0 */
+
 static unsigned char *g_base;
 static unsigned       g_size;
 static unsigned       g_used;
@@ -19,75 +33,86 @@ int rdramIsReady(void)     { return g_base != NULL; }
 void *rdramBase(void)      { return g_base; }
 unsigned rdramSize(void)   { return g_size; }
 
-static int fits_in_u32(const void *p, unsigned size)
+static int placement_is_valid(const void *p)
 {
-    unsigned long long start = (unsigned long long)(size_t)p;
-    return (start + size) <= 0x100000000ULL;
+    uintptr_t start = (uintptr_t)p;
+    uintptr_t end = start + GEPC_RDRAM_SIZE;
+
+    if (!p || end > GEPC_RDRAM_MAX_END) {
+        return 0;
+    }
+    /* Both ends must land in segment 0, or an address near the top of the
+     * arena would still be misread as segmented. */
+    return (((start >> 24) & 0x0Fu) == 0u) && ((((end - 1) >> 24) & 0x0Fu) == 0u);
+}
+
+static void release(void *p)
+{
+#if defined(_WIN32)
+    VirtualFree(p, 0, MEM_RELEASE);
+#else
+    munmap(p, GEPC_RDRAM_SIZE);
+#endif
 }
 
 int rdramInit(void)
 {
     void *p = NULL;
+    uintptr_t candidate;
 
     if (g_base) {
         return 0;
     }
 
+    /* Walk upward looking for a free low region. The address is requested
+     * exactly, never merely hinted, because a kernel that quietly relocates
+     * the mapping somewhere high would reintroduce the bug above. */
+    for (candidate = GEPC_RDRAM_MIN_BASE;
+         candidate + GEPC_RDRAM_SIZE <= GEPC_RDRAM_MAX_END;
+         candidate += 0x00100000u) {
 #if defined(_WIN32)
-    /* Walk up from 16 MB looking for a free region below 4 GB. VirtualAlloc
-     * honours the base address as a hard request, so a busy address simply
-     * fails and the next candidate is tried. */
-    {
-        uintptr_t candidate;
-        for (candidate = 0x01000000u; candidate < 0xF0000000u;
-             candidate += 0x01000000u) {
-            p = VirtualAlloc((LPVOID)candidate, GEPC_RDRAM_SIZE,
-                             MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-            if (p) {
+        p = VirtualAlloc((LPVOID)candidate, GEPC_RDRAM_SIZE,
+                         MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+        if (p) {
+            break;
+        }
+#else
+        {
+            int flags = MAP_PRIVATE | MAP_ANONYMOUS;
+#  if defined(MAP_FIXED_NOREPLACE)
+            /* Fails rather than replacing an existing mapping, which plain
+             * MAP_FIXED would happily do. */
+            flags |= MAP_FIXED_NOREPLACE;
+#  endif
+            p = mmap((void *)candidate, GEPC_RDRAM_SIZE,
+                     PROT_READ | PROT_WRITE, flags, -1, 0);
+            if (p == MAP_FAILED) {
+                p = NULL;
+                continue;
+            }
+            if ((uintptr_t)p == candidate) {
                 break;
             }
-        }
-    }
-#else
-#  if defined(MAP_32BIT)
-    /* MAP_32BIT exists precisely for this: it maps in the first 2 GB. */
-    p = mmap(NULL, GEPC_RDRAM_SIZE, PROT_READ | PROT_WRITE,
-             MAP_PRIVATE | MAP_ANONYMOUS | MAP_32BIT, -1, 0);
-    if (p == MAP_FAILED) {
-        p = NULL;
-    }
-#  endif
-    if (!p) {
-        /* Without MAP_32BIT, ask for a low address by hint and verify. The
-         * kernel may ignore the hint, so the result is checked rather than
-         * trusted. */
-        p = mmap((void *)(size_t)0x20000000u, GEPC_RDRAM_SIZE,
-                 PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-        if (p == MAP_FAILED) {
-            p = NULL;
-        } else if (!fits_in_u32(p, GEPC_RDRAM_SIZE)) {
+            /* Hint ignored: hand it back and keep looking rather than accept
+             * an address that breaks the segment-index invariant. */
             munmap(p, GEPC_RDRAM_SIZE);
             p = NULL;
         }
-    }
 #endif
+    }
 
     if (!p) {
-        platformLog("could not reserve %u bytes of RDRAM below 4 GB.",
+        platformLog("could not reserve %u bytes of RDRAM below 16 MB.",
                     GEPC_RDRAM_SIZE);
-        platformLog("the game's pointers must fit in a u32 to survive being "
-                    "written into display lists; refusing to continue rather "
-                    "than corrupt them.");
+        platformLog("game pointers must fit in a u32 and must carry segment "
+                    "index 0, or display lists silently render nothing.");
         return -1;
     }
 
-    if (!fits_in_u32(p, GEPC_RDRAM_SIZE)) {
-        platformLog("RDRAM arena landed at %p, above the 4 GB line.", p);
-#if defined(_WIN32)
-        VirtualFree(p, 0, MEM_RELEASE);
-#else
-        munmap(p, GEPC_RDRAM_SIZE);
-#endif
+    if (!placement_is_valid(p)) {
+        platformLog("RDRAM arena landed at %p, where addresses would be "
+                    "mistaken for segmented ones.", p);
+        release(p);
         return -1;
     }
 
@@ -98,9 +123,9 @@ int rdramInit(void)
     /* Hardware comes up zeroed and the game's allocator assumes as much. */
     memset(g_base, 0, g_size);
 
-    platformLog("RDRAM: %u bytes at %p (ends at 0x%08lx)",
+    platformLog("RDRAM: %u bytes at %p (segment index %u)",
                 g_size, g_base,
-                (unsigned long)((size_t)g_base + g_size));
+                (unsigned)(((uintptr_t)g_base >> 24) & 0x0Fu));
     return 0;
 }
 
@@ -109,11 +134,7 @@ void rdramShutdown(void)
     if (!g_base) {
         return;
     }
-#if defined(_WIN32)
-    VirtualFree(g_base, 0, MEM_RELEASE);
-#else
-    munmap(g_base, g_size);
-#endif
+    release(g_base);
     g_base = NULL;
     g_size = 0;
     g_used = 0;
@@ -135,7 +156,6 @@ void *rdramAlloc(unsigned size, unsigned align)
     if (align < 8) {
         align = 8;
     }
-    /* Round the alignment up to a power of two so the mask below is valid. */
     {
         unsigned a = 8;
         while (a < align && a < 0x10000000u) {
@@ -160,8 +180,6 @@ void *rdramPoolStart(void)
     if (!g_base) {
         return NULL;
     }
-    /* 16-byte aligned, matching what the game's allocator expects of the
-     * span it is handed. */
     return g_base + ((g_used + 15u) & ~15u);
 }
 

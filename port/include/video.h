@@ -23,6 +23,13 @@ int  videoIsReady(void);
  * window. */
 int  videoPumpEvents(void);
 
+/* Presenting can be turned off so a caller can read the finished frame back
+ * out of the back buffer. After SDL_GL_SwapWindow the back buffer no longer
+ * holds what was just drawn, so glReadPixels would otherwise see stale or
+ * undefined content -- which is exactly how a black screen can look like a
+ * passing test. */
+void videoSetPresentEnabled(int enabled);
+
 /* Per-frame counters for the debug overlay. */
 unsigned videoFrameCount(void);
 unsigned videoTriangleCount(void);

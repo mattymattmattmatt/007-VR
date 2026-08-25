@@ -304,13 +304,38 @@ int gfxStateRun(gfx_state *st, const void *dl, unsigned max_commands)
     run_frame stack[GEPC_GBI_MAX_DEPTH];
     unsigned depth = 0;
     const Gfx *pc = (const Gfx *)dl;
-    unsigned long budget = max_commands ? (unsigned long)max_commands : 4000000ul;
+    const Gfx *top = (const Gfx *)dl;
+    uintptr_t top_hi;
+    unsigned long budget = 4000000ul;
 
     if (!st || !pc) {
         return -1;
     }
 
+    /* max_commands bounds the TOP-LEVEL list only.
+     *
+     * rspGfxTaskStart records data_size as the length of the list it was
+     * handed; display lists that list calls into are separate allocations and
+     * are not counted in it. Spending the same budget on nested lists makes a
+     * frame abort partway through as soon as it calls a sub-list -- which
+     * GoldenEye does constantly, so almost every real frame would silently
+     * lose geometry. The runaway guard below is what actually stops an
+     * unterminated list; max_commands only stops the top-level walk running
+     * off the end of the buffer it was given. */
+    top_hi = (uintptr_t)top + (uintptr_t)max_commands * sizeof(Gfx);
+
     while (budget--) {
+        /* A sequential walk that runs off the end of the buffer lands exactly
+         * on its end address, which is the case worth catching. Measuring the
+         * distance from the start instead would be wrong after a branch: a
+         * branch transfers control out of this buffer for good, into an
+         * unrelated allocation, and subtracting pointers into different
+         * objects is undefined behaviour as well as meaningless. Once
+         * execution has left, the runaway guard is what covers it. */
+        if (max_commands && depth == 0 && (uintptr_t)pc == top_hi) {
+            return -1;
+        }
+
         unsigned w0 = (unsigned)pc->words.w0;
         unsigned w1 = (unsigned)pc->words.w1;
         unsigned char op = OP_OF(w0);
@@ -427,6 +452,102 @@ int gfxStateRun(gfx_state *st, const void *dl, unsigned max_commands)
                                               (int)((w0 >> 21) & 0x07u),
                                               (int)((w0 >> 19) & 0x03u),
                                               (int)((w0 & 0x0FFFu) + 1));
+            }
+            break;
+
+        case (unsigned char)G_MOVEWORD: {
+            /* gMoveWd packs the offset into bits 8-23 and the index into the
+             * low byte. gSPSegment is a G_MOVEWORD with index G_MW_SEGMENT
+             * and offset = segment * 4 -- which means that without this case
+             * no segment is ever bound, and every segmented address in the
+             * game resolves to nothing. */
+            unsigned index = w0 & 0xFFu;
+            unsigned offset = (w0 >> 8) & 0xFFFFu;
+
+            if (index == (unsigned)G_MW_SEGMENT) {
+                gbiSetSegment(offset / 4u, (const void *)(uintptr_t)w1);
+            }
+            /* The other indices (fog, numlights, perspnorm, clip ratio) are
+             * state the backend does not consume yet. */
+            break;
+        }
+
+        case (unsigned char)G_SETTILE:
+            if (st->backend.set_tile) {
+                st->backend.set_tile(st->backend.user,
+                                     (int)((w1 >> 24) & 0x07u),   /* tile    */
+                                     (int)((w0 >> 21) & 0x07u),   /* fmt     */
+                                     (int)((w0 >> 19) & 0x03u),   /* siz     */
+                                     (int)((w0 >> 9) & 0x1FFu),   /* line    */
+                                     (int)(w0 & 0x1FFu),          /* tmem    */
+                                     (int)((w1 >> 20) & 0x0Fu),   /* palette */
+                                     (int)((w1 >> 8) & 0x03u),    /* cms     */
+                                     (int)((w1 >> 18) & 0x03u),   /* cmt     */
+                                     (int)((w1 >> 4) & 0x0Fu),    /* masks   */
+                                     (int)((w1 >> 14) & 0x0Fu),   /* maskt   */
+                                     (int)(w1 & 0x0Fu),           /* shifts  */
+                                     (int)((w1 >> 10) & 0x0Fu));  /* shiftt  */
+            }
+            break;
+
+        case (unsigned char)G_SETTILESIZE:
+            if (st->backend.set_tile_size) {
+                st->backend.set_tile_size(st->backend.user,
+                                          (int)((w1 >> 24) & 0x07u),
+                                          (int)((w0 >> 12) & 0xFFFu),
+                                          (int)(w0 & 0xFFFu),
+                                          (int)((w1 >> 12) & 0xFFFu),
+                                          (int)(w1 & 0xFFFu));
+            }
+            break;
+
+        case (unsigned char)G_LOADBLOCK:
+            if (st->backend.load_block) {
+                st->backend.load_block(st->backend.user,
+                                       (int)((w1 >> 24) & 0x07u),
+                                       (int)((w0 >> 12) & 0xFFFu),
+                                       (int)(w0 & 0xFFFu),
+                                       (int)((w1 >> 12) & 0xFFFu),
+                                       (int)(w1 & 0xFFFu));
+            }
+            break;
+
+        case (unsigned char)G_LOADTLUT:
+            if (st->backend.load_tlut) {
+                /* The count sits in the upper bits of the lower half, and is
+                 * one less than the number of entries. */
+                st->backend.load_tlut(st->backend.user,
+                                      (int)((w1 >> 24) & 0x07u),
+                                      (int)(((w1 >> 14) & 0x3FFu) + 1u));
+            }
+            break;
+
+        case (unsigned char)G_SETSCISSOR:
+            if (st->backend.set_scissor) {
+                /* Scissor coordinates are 10.2 fixed point. */
+                int ulx = (int)((w0 >> 12) & 0xFFFu) >> 2;
+                int uly = (int)(w0 & 0xFFFu) >> 2;
+                int lrx = (int)((w1 >> 12) & 0xFFFu) >> 2;
+                int lry = (int)(w1 & 0xFFFu) >> 2;
+                st->backend.set_scissor(st->backend.user, ulx, uly,
+                                        lrx - ulx, lry - uly);
+            }
+            break;
+
+        case (unsigned char)G_FILLRECT:
+            if (st->backend.fill_rect) {
+                /* Also 10.2, and inclusive at the lower right. */
+                st->backend.fill_rect(st->backend.user,
+                                      (int)((w1 >> 12) & 0xFFFu) >> 2,
+                                      (int)(w1 & 0xFFFu) >> 2,
+                                      ((int)((w0 >> 12) & 0xFFFu) >> 2) + 1,
+                                      ((int)(w0 & 0xFFFu) >> 2) + 1);
+            }
+            break;
+
+        case (unsigned char)G_SETFILLCOLOR:
+            if (st->backend.set_fill_color) {
+                st->backend.set_fill_color(st->backend.user, w1);
             }
             break;
 

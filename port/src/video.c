@@ -22,6 +22,7 @@ static gfx_state    *g_state;
 static int           g_ready;
 static int           g_quit;
 
+static int      g_present = 1;
 static unsigned g_frames;
 static unsigned g_triangles;
 static unsigned g_draw_calls;
@@ -64,7 +65,7 @@ static void on_gfx_task(const void *dl, unsigned bytes, void *user)
 
     /* The game's task carries OS_SC_SWAPBUFFER, so one graphics task is one
      * frame. */
-    if (g_window) {
+    if (g_window && g_present) {
         SDL_GL_SwapWindow(g_window);
     }
 }
@@ -142,6 +143,8 @@ void videoShutdown(void)
 }
 
 int videoIsReady(void) { return g_ready; }
+
+void videoSetPresentEnabled(int enabled) { g_present = enabled; }
 
 int videoPumpEvents(void)
 {

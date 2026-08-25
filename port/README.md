@@ -38,6 +38,56 @@ tested on its own first, because a shim with subtly wrong queue semantics
 produces a game that boots and then deadlocks, which is miserable to debug
 later with a headset on.
 
+## What the first end-to-end run found
+
+`ge007-selftest` drives the real stack: it builds a display list in the RDRAM
+arena, submits it through the SP task interception, and **reads the
+framebuffer back**. That last part is what made it useful. Every bug below
+left the triangle and draw-call counters looking perfectly healthy.
+
+```sh
+LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a ./build/port/ge007-selftest
+```
+
+**The arena broke the segment-index invariant.** It was placed anywhere below
+4 GB, and landed at `0x40c00000`. Segmented addresses carry their segment
+number in bits 24-27, and on hardware RDRAM is physical `0x00000000-0x007fffff`
+so a direct pointer always has segment index 0. At `0x40c00000` every direct
+pointer in a display list was read as a segment reference, `G_VTX` resolved to
+nothing, and every triangle drew degenerate. The arena is now constrained
+below 16 MB and the placement is verified rather than assumed.
+
+**Segment 0 was not the identity mapping.** Even at a correct address, an
+unbound segment 0 made every direct pointer resolve to NULL. It is now bound
+to zero by default, as hardware has it.
+
+**Thirteen commands were never dispatched.** Among them `G_MOVEWORD`, which is
+how `gSPSegment` binds a segment — so nothing segmented could resolve at all —
+and the whole `G_SETTILE` / `G_SETTILESIZE` / `G_LOADBLOCK` / `G_LOADTLUT`
+group, meaning no texture ever uploaded. The GL backend had handlers for all
+of them; they were simply never called.
+
+**Nested sub-lists spent the caller's command budget.** `data_size` describes
+the list the task was handed; lists it calls into are separate allocations and
+are not counted in it. An earlier note in this repository called `data_size` an
+"exact bound" for the walk — that was wrong. A frame aborted as soon as it
+called a sub-list, and GoldenEye's model code does that constantly, so nearly
+every real frame would have silently lost geometry. The bound now applies to
+the top-level list only, detected by the walk landing exactly on the buffer's
+end address; a runaway guard covers everything else. Note that measuring
+distance from the start instead is doubly wrong, because a branch leaves the
+buffer for good and subtracting pointers into different objects is undefined
+behaviour.
+
+**Nothing cleared the framebuffer between frames.** Frames composited onto one
+another, and stale depth values rejected the new frame's geometry wherever it
+sat at the same depth — so the picture simply stopped updating. Colour and
+depth are now cleared at frame start.
+
+One harness lesson worth keeping: `glReadPixels` after `SDL_GL_SwapWindow`
+reads a stale buffer, which can make a black screen look like a passing test.
+`videoSetPresentEnabled(0)` keeps the finished frame where it can be read.
+
 ## Bring-up notes
 
 These were all found the hard way. Anything compiling the game's headers on a

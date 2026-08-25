@@ -160,6 +160,13 @@ if(GEPC_SDL2_FOUND)
             target_compile_options(ge007_gfx_gl PRIVATE -Werror)
         endif()
     endif()
+    # End-to-end harness. Drives the real stack -- RDRAM, task interception,
+    # decoder, GL backend, audio -- and reads the framebuffer back, which is
+    # the only way to tell a working renderer from one whose counters merely
+    # look healthy. Needs a display; under CI run it with
+    #   LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a ./ge007-selftest
+    add_executable(ge007-selftest tools/ge007_selftest.c)
+    target_link_libraries(ge007-selftest PRIVATE ge007_gfx_gl)
 else()
     message(STATUS
         "ge007 port: SDL2 not found; skipping the OpenGL backend. "

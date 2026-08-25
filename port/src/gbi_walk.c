@@ -3,6 +3,7 @@
 #include "platform.h"
 
 #include <stddef.h>
+#include <stdint.h>
 #include <string.h>
 
 #include <PR/ultratypes.h>
@@ -31,18 +32,43 @@
  * selects. GoldenEye builds the F3DEX (GBI 1) branch. */
 #define OP_OF(w0) ((unsigned char)(((w0) >> 24) & 0xFFu))
 
-static const void *g_segments[GEPC_GBI_MAX_SEGMENTS];
+static uintptr_t g_segment_base[GEPC_GBI_MAX_SEGMENTS];
+static int       g_segment_bound[GEPC_GBI_MAX_SEGMENTS];
+static int       g_segments_ready;
+
+/* Segment 0 is the identity mapping on hardware: an address with segment
+ * index 0 is a plain physical address and resolves to itself. Direct pointers
+ * the game embeds in display lists -- vertex arrays, matrices, textures -- all
+ * land there, because RDRAM is physical 0x00000000-0x007fffff.
+ *
+ * Leaving segment 0 unbound made every one of those resolve to NULL, so no
+ * vertices ever loaded and the screen stayed black while the triangle and
+ * draw-call counters looked perfectly healthy. */
+static void ensure_segments(void)
+{
+    if (g_segments_ready) {
+        return;
+    }
+    memset(g_segment_base, 0, sizeof(g_segment_base));
+    memset(g_segment_bound, 0, sizeof(g_segment_bound));
+    g_segment_base[0] = 0;
+    g_segment_bound[0] = 1;
+    g_segments_ready = 1;
+}
 
 void gbiSetSegment(unsigned segment, const void *base)
 {
+    ensure_segments();
     if (segment < GEPC_GBI_MAX_SEGMENTS) {
-        g_segments[segment] = base;
+        g_segment_base[segment] = (uintptr_t)base;
+        g_segment_bound[segment] = 1;
     }
 }
 
 void gbiResetSegments(void)
 {
-    memset(g_segments, 0, sizeof(g_segments));
+    g_segments_ready = 0;
+    ensure_segments();
 }
 
 const void *gbiResolve(unsigned addr)
@@ -50,12 +76,14 @@ const void *gbiResolve(unsigned addr)
     unsigned segment = (addr >> 24) & 0x0Fu;
     unsigned offset = addr & 0x00FFFFFFu;
 
-    /* Segment 0 is conventionally the identity mapping, but only if nothing
-     * has been bound to it; the game does use it as a real segment. */
-    if (!g_segments[segment]) {
+    ensure_segments();
+
+    if (!g_segment_bound[segment]) {
         return NULL;
     }
-    return (const unsigned char *)g_segments[segment] + offset;
+    /* Computed in uintptr_t rather than by offsetting a possibly-null
+     * pointer, which would be undefined behaviour for the identity segment. */
+    return (const void *)(g_segment_base[segment] + offset);
 }
 
 const char *gbiOpName(unsigned char op)
@@ -167,11 +195,13 @@ int gbiWalk(const void *dl, unsigned max_commands, gbi_stats *stats)
     walk_frame stack[GEPC_GBI_MAX_DEPTH];
     unsigned depth = 0;
     const Gfx *pc = (const Gfx *)dl;
+    const Gfx *top = (const Gfx *)dl;
+    uintptr_t top_hi;
     /* There is no length in a display list, only a terminator, so an
      * unterminated one can only be caught by refusing to read past a bound the
      * caller supplies. Without that the walk runs off the buffer long before
      * any counter would notice. */
-    unsigned long budget = max_commands ? (unsigned long)max_commands : 4000000ul;
+    unsigned long budget = 4000000ul;
 
     if (!stats) {
         stats = &local;
@@ -182,7 +212,30 @@ int gbiWalk(const void *dl, unsigned max_commands, gbi_stats *stats)
         return -1;
     }
 
+    /* max_commands bounds the TOP-LEVEL list only.
+     *
+     * rspGfxTaskStart records data_size as the length of the list it was
+     * handed; display lists that list calls into are separate allocations and
+     * are not counted in it. Spending the same budget on nested lists makes a
+     * frame abort partway through as soon as it calls a sub-list -- which
+     * GoldenEye does constantly, so almost every real frame would silently
+     * lose geometry. The runaway guard below is what actually stops an
+     * unterminated list; max_commands only stops the top-level walk running
+     * off the end of the buffer it was given. */
+    top_hi = (uintptr_t)top + (uintptr_t)max_commands * sizeof(Gfx);
+
     while (budget--) {
+        /* A sequential walk that runs off the end of the buffer lands exactly
+         * on its end address, which is the case worth catching. Measuring the
+         * distance from the start instead would be wrong after a branch: a
+         * branch transfers control out of this buffer for good, into an
+         * unrelated allocation, and subtracting pointers into different
+         * objects is undefined behaviour as well as meaningless. Once
+         * execution has left, the runaway guard is what covers it. */
+        if (max_commands && depth == 0 && (uintptr_t)pc == top_hi) {
+            return -1;
+        }
+
         unsigned w0 = (unsigned)pc->words.w0;
         unsigned w1 = (unsigned)pc->words.w1;
         unsigned char op = OP_OF(w0);
