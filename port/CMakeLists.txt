@@ -33,6 +33,8 @@ add_library(ge007_platform STATIC
     src/gfx_state.c
     src/rdram.c
     src/gfx_texture.c
+    src/audio.c
+    src/audio_abi.c
 )
 
 # port/include must come FIRST: it carries the strings.h shim that keeps
@@ -109,6 +111,11 @@ if(GEPC_BUILD_TESTS)
     add_test(NAME ge007_gfx_state COMMAND ge007_gfx_tests)
     set_tests_properties(ge007_gfx_state PROPERTIES TIMEOUT 60)
 
+    add_executable(ge007_audio_tests tests/test_audio.c)
+    target_link_libraries(ge007_audio_tests PRIVATE ge007_platform)
+    add_test(NAME ge007_audio COMMAND ge007_audio_tests)
+    set_tests_properties(ge007_audio PROPERTIES TIMEOUT 60)
+
     add_executable(ge007_hook_tests tests/test_gfxhook.c)
     target_link_libraries(ge007_hook_tests PRIVATE ge007_platform)
     add_test(NAME ge007_gfxhook COMMAND ge007_hook_tests)
@@ -145,7 +152,7 @@ if(PkgConfig_FOUND)
 endif()
 
 if(GEPC_SDL2_FOUND)
-    add_library(ge007_gfx_gl STATIC src/gfx_gl.c src/video.c)
+    add_library(ge007_gfx_gl STATIC src/gfx_gl.c src/video.c src/audio_sdl.c)
     target_link_libraries(ge007_gfx_gl PUBLIC ge007_platform PkgConfig::GEPC_SDL2)
     if(NOT MSVC)
         target_compile_options(ge007_gfx_gl PRIVATE -Wall -Wextra)

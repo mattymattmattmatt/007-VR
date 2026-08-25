@@ -27,7 +27,10 @@ ctest --test-dir build/port --output-on-failure
 | `src/gfx_gl.c` — OpenGL 3.3 backend | **first pass, builds** |
 | `src/video.c` — window, GL context, frame loop | **done, builds** |
 | SP task interception | **done, 19 assertions** |
-| `src/audio.c` | not started |
+
+| `src/audio.c` — AI output path | **done** |
+| `src/audio_abi.c` — software audio microcode | **first pass, 350 assertions** |
+| `src/audio_sdl.c` — audio device | **builds, unrun** |
 | `src/input.c` | not started |
 
 Nothing here is wired into the game yet. The platform layer is built and
@@ -184,6 +187,41 @@ Two API notes from building the walker:
   only a `G_ENDDL` terminator, so an unterminated one cannot be detected
   except by refusing to read past a caller-supplied limit — by the time any
   counter noticed, the walk has already run off the buffer.
+
+## Audio
+
+The audio path is the mirror image of the graphics one. `alAudioFrame()` in
+`src/libultra/audio/synthesizer.c` builds a list of `Acmd` commands; on
+hardware the RSP audio microcode executes them against a 4 KB scratchpad and
+leaves a frame of PCM behind, which the game hands to the DAC with
+`osAiSetNextBuffer`. So the port interprets that command list in software
+(`audio_abi.c`) and models the DAC as a ring buffer (`audio.c`).
+
+**The pacing has to be truthful.** `src/audi.c` sizes each frame as
+`g_FrameSize - (osAiGetLength() >> 2)`, so `osAiGetLength` must fall as the
+device consumes audio. Returning a constant zero makes the game generate
+maximum-size frames forever and run away from the DAC; over-reporting starves
+it. That is why the ring is modelled properly rather than stubbed.
+
+### What is solid, and what is not
+
+Implemented exactly and tested against hand-computed values: buffer clears,
+DMEM moves, DMA in and out, mixing, interleave, the big-endian DMEM layout,
+and ADPCM nibble extraction, sign handling, scaling and clamping.
+
+**Approximated, and audibly so:** the resampler uses linear interpolation
+rather than the hardware's filter, and the envelope mixer uses a straight
+linear ramp rather than the per-sample rate registers. Pitch-shifted voices
+and volume ramps will be close but not sample-accurate. This is a stated
+limitation, not a placeholder — it is the first place to look if the audio
+sounds subtly wrong, and it wants checking against real output before anyone
+calls the audio finished.
+
+One bug worth recording, found by the compiler rather than by a test: the
+ADPCM decoder shifted sign-extended nibbles left, and left-shifting a negative
+value is undefined behaviour in C. It happened to do the right thing under
+gcc, which is exactly what makes that class of bug surface years later under a
+different compiler. Both sites now multiply instead.
 
 ## Where the display list is intercepted
 
