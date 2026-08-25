@@ -77,7 +77,13 @@ typedef enum prefix                                                             
 #define CREATE_STRINGS1(prefix, name) IF_VA(DEFINED(DEBUG))(IF_ELSE(prefix)              \
 (#prefix "_" #name)(#name)COMMA())
 
-#ifdef __sgi
+/* The generated macro below needs the IDO preprocessor's tolerance for
+ * omitted arguments. The PC build uses a variadic equivalent instead; without
+ * one it would fall through to the empty definition and lose every bitflag
+ * enum in this file. */
+#if defined(GEPC)
+#    include <gepc_bitflag.h>
+#elif defined(__sgi)
 /**
  * Auto Generate Bitflag enums. (up to 32bit) - Unfortunatly we loose intellisense comments
  * @param NAME: Name of bitflag

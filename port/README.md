@@ -38,6 +38,51 @@ tested on its own first, because a shim with subtly wrong queue semantics
 produces a game that boots and then deadlocks, which is miserable to debug
 later with a headset on.
 
+## Compiling the game's own sources
+
+The next milestone is building the 313 translation units in `src/` against
+this platform layer. `port/tools/compile-survey.sh` reports where that stands
+and groups whatever still fails by cause, so the remaining work stays
+measurable.
+
+It went **42 -> 262 of 313** in one pass, and almost none of that was porting
+work — it was three findings:
+
+**Include paths, not portability (42 -> 195).** The bulk of the early failures
+were headers that simply were not on the search path: `assets/images.def`,
+`os_internal.h`, `mbi.h`, `io/controller.h`. Adding the repository root,
+`include/PR`, and `src/libultra` fixed 153 files without touching a line of
+code.
+
+**A circular include (195 -> 240).** `bondtypes.h` includes
+`game/chrobjdata.h`, which includes `bondtypes.h` straight back. With include
+guards, whichever header a translation unit reaches first decides the order
+the declarations appear in — and `chrobjdata.h` needs types declared further
+down `bondtypes.h`. Units that reach `bondtypes.h` first therefore saw extern
+arrays whose element structs did not exist yet. The ROM build survives because
+its units happen to reach `chrobjdata.h` first; the PC build cannot rely on
+that, so it takes the include at the bottom of `bondtypes.h` instead.
+
+**BITFLAG only existed on the SGI compiler (240 -> 262).** `bondconstants.h`
+generates its bitflag enums with a macro taking a fixed 33 parameters, relying
+on the IDO preprocessor letting call sites omit the trailing ones. GCC and
+clang reject that, so the macro is guarded on `__sgi` — and *everything else
+got an empty definition*, which silently deleted every enum it declares.
+`PLAYERFLAG` was one, and its absence took 47 translation units down. The PC
+build uses a variadic equivalent in `port/include/gepc_bitflag.h`; call sites
+are unchanged.
+
+Both edits to `src/` are guarded on `GEPC` and the ROM build is provably
+unaffected: preprocess `bondconstants.h` and `bondtypes.h` with and without
+the patch, strip the `# line` markers, and the token streams are identical.
+(Comparing the raw preprocessor output does *not* show that, because added
+lines shift every line marker — worth knowing before concluding a guarded
+change has leaked.)
+
+The remaining 51 failures are a long tail rather than one blocker: struct
+members that have moved, a handful of undeclared identifiers, an
+`osSyncPrintf` arity mismatch, and some token-pasting in the model macros.
+
 ## What the first end-to-end run found
 
 `ge007-selftest` drives the real stack: it builds a display list in the RDRAM

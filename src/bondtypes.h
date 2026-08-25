@@ -28,7 +28,20 @@
 #include <bondconstants.h>
 #include "snd.h"
 #ifndef AIPARSE
-    #include "game/chrobjdata.h"
+    /* bondtypes.h and game/chrobjdata.h include each other. With include
+     * guards, whichever one a .c file reaches first decides the order the
+     * declarations appear in -- and chrobjdata.h needs types that are defined
+     * further down this file. A translation unit that reaches bondtypes.h
+     * first therefore sees chrobjdata.h's extern arrays before their element
+     * structs exist, which is a hard error.
+     *
+     * The N64 build gets away with it because its translation units happen to
+     * reach chrobjdata.h first. The PC build cannot rely on that, so it takes
+     * the include at the bottom of this file instead, where the types exist.
+     * The ROM build is unaffected: without GEPC this is exactly as it was. */
+    #ifndef GEPC
+        #include "game/chrobjdata.h"
+    #endif
 #endif
 
         /**
@@ -4216,5 +4229,12 @@ struct font {
 	s32 kerning[13 * 13];
 	struct fontchar chars[94]; // can be 135 in PAL
 };
+
+
+/* See the note at the top of this file: on the PC build chrobjdata.h is
+ * included here, after every type it needs has been declared. */
+#if defined(GEPC) && !defined(AIPARSE)
+#include "game/chrobjdata.h"
+#endif
 
 #endif
