@@ -1,6 +1,9 @@
 #include <ultra64.h>
 #include "joy.h"
 #include <PR/os.h>
+#ifdef GE_VR
+#include "gevr_shim.h"
+#endif
 
 #define JOY_CLAMP_MIN          0
 #define JOY_CLAMP_MAX        120
@@ -419,6 +422,13 @@ void joyConsumeSamplesWrapper(void)
     {
         g_ContRecordFunc(g_ContData[CONTDATA_REGULAR].samples, g_ContData[CONTDATA_REGULAR].curstart, g_ContData[CONTDATA_REGULAR].curlast);
     }
+
+#ifdef GE_VR
+    /* Overwrite pads 0 and 1 with the VR-derived state, after the real
+     * controllers have been consumed and before any game code reads them.
+     * The engine's own 2.4 Goodhead routing then takes it from here. */
+    gevr_shim_inject_pads();
+#endif
 }
 
 

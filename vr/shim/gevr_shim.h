@@ -1,0 +1,102 @@
+/*
+ * gevr_shim.h - the seam between the GoldenEye engine and the VR layer.
+ *
+ * Everything in this header is a no-op unless GE_VR is defined. The N64 ROM
+ * target never defines it, so the matching build sees an empty translation
+ * unit and unchanged call sites. joy.c in particular contains code commented
+ * "required for matching", so the guards are not optional politeness.
+ *
+ * Call order for one VR frame:
+ *
+ *   gevr_shim_frame_begin()      once, before the game ticks
+ *   gevr_shim_inject_pads()      after joyConsumeSamplesWrapper()
+ *   ... the game ticks as normal ...
+ *   for each eye:
+ *       gevr_shim_begin_eye(e)
+ *       ... the game renders its display list ...
+ *       gevr_shim_end_eye(e)
+ *   gevr_shim_frame_end()
+ *
+ * The engine keeps ownership of movement, collision and hitscan. The VR layer
+ * only supplies input and per-eye view/projection.
+ */
+#ifndef GEVR_SHIM_H
+#define GEVR_SHIM_H
+
+#ifdef GE_VR
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* Brings up OpenXR. Returns 0 on success; on failure the game should carry on
+ * flat rather than refusing to start, so a broken runtime is not fatal. */
+int  gevr_shim_init(void);
+void gevr_shim_shutdown(void);
+int  gevr_shim_active(void);
+
+/* Waits on the compositor and reads this frame's poses and controllers. */
+void gevr_shim_frame_begin(void);
+void gevr_shim_frame_end(void);
+
+/* Overwrites synthetic pads 0 and 1 in g_ContDataPtr with the VR-derived
+ * state, so the engine's own 2.4 Goodhead path consumes them unchanged. Also
+ * forces the current player's control style to Goodhead, because the whole
+ * mapping depends on that routing. */
+void gevr_shim_inject_pads(void);
+
+/* 0 = left, 1 = right. Between begin and end the swapchain image for that eye
+ * is bound and the viewport is set. */
+void gevr_shim_begin_eye(int eye);
+void gevr_shim_end_eye(int eye);
+int  gevr_shim_current_eye(void);
+
+/* Fills a projection matrix for the eye currently being rendered. Returns 1
+ * if it wrote one, 0 if the caller should fall back to guPerspective.
+ *
+ * A headset frustum is asymmetric and guPerspective can only express a
+ * symmetric one, so this must replace it rather than adjust it. Passing the
+ * runtime's own angles through unchanged is what keeps straight lines straight;
+ * substituting a symmetric approximation shears the world toward the nose. */
+int  gevr_shim_eye_projection(float out_mtx[16], float *out_persp_norm);
+
+/* Per-eye view matrix in game world units, for the same eye. */
+int  gevr_shim_eye_view(float out_mtx[16]);
+
+/* The same two matrices in libultra's convention.
+ *
+ * guPerspectiveF and guLookAtF build row-vector matrices (the vertex is a row
+ * on the left, v * M), while the VR layer works in the OpenGL column-vector
+ * convention (M * v). The two forms are transposes of each other, so writing a
+ * gevr matrix straight into an f32[4][4] destined for guMtxF2L would render a
+ * scrambled frustum. These two do the transpose explicitly. */
+int  gevr_shim_eye_projection_n64(float out[4][4]);
+int  gevr_shim_eye_view_n64(float out[4][4]);
+
+/* Roomscale offset to add to the player's camera position this frame, in game
+ * units, and the crouch offset in game units (negative when crouching). */
+void gevr_shim_room_offset(float *out_x, float *out_y, float *out_z);
+float gevr_shim_crouch_offset(void);
+
+#ifdef __cplusplus
+}
+#endif
+
+#else /* !GE_VR */
+
+/* The ROM build compiles these to nothing. */
+#define gevr_shim_init()            (0)
+#define gevr_shim_shutdown()        ((void)0)
+#define gevr_shim_active()          (0)
+#define gevr_shim_frame_begin()     ((void)0)
+#define gevr_shim_frame_end()       ((void)0)
+#define gevr_shim_inject_pads()     ((void)0)
+#define gevr_shim_begin_eye(e)      ((void)0)
+#define gevr_shim_end_eye(e)        ((void)0)
+#define gevr_shim_current_eye()     (0)
+#define gevr_shim_eye_projection_n64(m) (0)
+#define gevr_shim_eye_view_n64(m)       (0)
+
+#endif /* GE_VR */
+
+#endif /* GEVR_SHIM_H */

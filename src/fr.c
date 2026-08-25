@@ -11,6 +11,9 @@
 #include "game/bondview.h"
 #include "game/viewport.h"
 #include "game/dyn.h"
+#ifdef GE_VR
+#include "gevr_shim.h"
+#endif
 #ifdef ENABLE_USB
 #include "usb.h"
 #endif
@@ -707,6 +710,14 @@ Gfx *viSetupCurrentPlayerView(Gfx *gdl)
     // Create both a floating-point matrix for the CPU side and a fixed-point matrix for the RSP.
     g_viProjectionMatrix = dynAllocateMatrix();
     guPerspectiveF(g_viProjectionMatrixF, &g_viPerspNorm, g_ViBackData->fovy, g_ViBackData->aspect, g_ViBackData->znear, g_ViBackData->zfar, 1.0f);
+#ifdef GE_VR
+    /* Replace the symmetric frustum with the headset's own asymmetric one for
+     * the eye being rendered. guPerspective cannot express an off-centre
+     * frustum, and approximating one with a symmetric matrix shears the world
+     * toward the nose. Leaves g_viPerspNorm alone: it drives the RSP's
+     * perspective correction, which a PC renderer backend does not use. */
+    gevr_shim_eye_projection_n64(g_viProjectionMatrixF);
+#endif
     guMtxF2L(g_viProjectionMatrixF, g_viProjectionMatrix);
 
     /** 
