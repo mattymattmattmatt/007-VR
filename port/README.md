@@ -1,0 +1,131 @@
+# GoldenEye 007 — PC port (layer 2)
+
+The decomp builds an N64 ROM. This directory makes the game run on a PC.
+`vr/` then puts it in a headset. See
+[docs/VR/Architecture.md](../docs/VR/Architecture.md) for how the three layers
+relate, and why Perfect Dark's port is the template.
+
+```sh
+cmake -S port -B build/port -DCMAKE_BUILD_TYPE=Release
+cmake --build build/port -j
+ctest --test-dir build/port --output-on-failure
+```
+
+## State
+
+| Piece | State |
+|---|---|
+| `src/system.c` — clock, sleep, paths, logging | **done** |
+| `src/libultra.c` — threads, message queues, timers | **done, 236 assertions** |
+| `src/romdata.c` — assets from the player's ROM | not started |
+| `fast3d/` + `src/video.c` — display lists to GPU | not started |
+| `src/audio.c` | not started |
+| `src/input.c` | not started |
+
+Nothing here is wired into the game yet. The platform layer is built and
+tested on its own first, because a shim with subtly wrong queue semantics
+produces a game that boots and then deadlocks, which is miserable to debug
+later with a headset on.
+
+## Bring-up notes
+
+These were all found the hard way. Anything compiling the game's headers on a
+PC needs them.
+
+### The compile recipe
+
+```
+-D_LANGUAGE_C -idirafter <repo>/include -idirafter <repo>/src
+```
+
+**`_LANGUAGE_C`** — `PR/ultratypes.h` wraps every typedef in
+`#if defined(_LANGUAGE_C)`. Without it the headers parse and declare nothing,
+and you get a confusing wall of "unknown type name `OSThread`".
+
+**`-idirafter`, not `-I`** — the repository ships N64 replacements for seven
+libc headers: `stdarg.h`, `stddef.h`, `string.h`, `stdlib.h`, `math.h`,
+`assert.h`, `limits.h`. With a plain `-Iinclude`, the host's `stdio.h` includes
+`<stdarg.h>`, finds the N64 one, which includes `ultra64.h`, and the build
+collapses in a way that points nowhere near the real cause. `-idirafter` puts
+the repo's directories *after* the system ones, so libc wins for those names
+while `PR/*` and `ultra64.h` still resolve.
+
+### bcopy, bcmp and bzero collide with glibc — twice
+
+`PR/os.h` declares these three with `int` lengths, as the N64 SDK did. glibc
+declares them with `size_t`. That is a hard conflict, and it arrives by two
+separate routes that need two separate fixes:
+
+1. **Declarations**, from `<strings.h>`, pulled in by `<string.h>`.
+   Fixed by `port/include/strings.h`, a deliberate shim that shadows glibc's
+   and forwards only the non-conflicting functions.
+2. **Definitions**, from `bits/strings_fortified.h`, pulled in by
+   `pthread.h` → `features.h`. These are fortified inline *definitions*, so no
+   include ordering can avoid them. Fixed by building the port with
+   `-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0`.
+
+The second only triggers at `-O2` and above. A debug build can look perfectly
+healthy and Release then fails, so both fixes are in `CMakeLists.txt` rather
+than left to whoever hits it next.
+
+### CMake de-duplicates repeated flags
+
+`target_compile_options(... -idirafter A -idirafter B)` collapses the two
+identical `-idirafter` tokens into one and leaves `B` stranded as a bare
+argument, silently dropping a directory from the search path. The `SHELL:`
+prefix keeps each flag and its path together.
+
+### 64-bit is the open question
+
+`PR/os.h` declares `u32 osVirtualToPhysical(void *)`, because on the N64 every
+address genuinely was 32 bits. The game relies on it: `src/game/model.c` feeds
+the result straight into display lists through `gSPVertex`.
+
+On a 64-bit host a heap pointer does not fit. Silently truncating would fill
+display lists with addresses that are wrong in a way nothing detects until
+geometry renders as garbage, so the shim **panics instead of truncating**.
+
+Two ways out, in order of preference:
+
+- **Build 32-bit.** Perfect Dark's port sets `TARGET_ARCH i686` and the
+  question disappears.
+- **Arena below 4 GB.** Keep everything the game can see in low memory.
+
+Fast3D resolves *segmented* addresses through its own segment table, so this
+only has to cover direct pointers. The decision is still open and wants making
+before the renderer work starts.
+
+### Deliberate differences from real hardware
+
+**Scheduling.** The N64 is strictly priority-preemptive — the highest-priority
+runnable thread always runs. Here the host scheduler decides and `OSPri` is
+advisory. Game code that quietly relied on a lower-priority thread not running
+can therefore race. The fix when it bites is an explicit message-queue
+handshake, not rebuilding a priority scheduler on top of the host's.
+
+**Queue synchronisation.** `OSMesgQueue` has no room for a mutex or condition
+variable and its layout has to stay as the game's headers declare it, so every
+queue shares one global mutex and condition variable, woken by broadcast. With
+the handful of threads an N64 title runs, contention is irrelevant.
+
+**`osClockRate`.** On hardware `osInitialize` sets it to `OS_CLOCK_RATE` and
+then scales it by 3/4, so game code always reads the count-register rate. The
+port never runs `osInitialize`, so the shim defines it already carrying the
+post-init value. Seeding it with `OS_CLOCK_RATE` instead would make every
+timer and elapsed-time reading run 33% fast.
+
+**Thread suspension.** Real libultra can suspend an arbitrary thread.
+`osStopThread` here records the intent and lets the thread notice, because
+forcibly suspending a host thread mid-`malloc` deadlocks.
+
+**RSP/RDP calls are absent on purpose.** `osSpTaskLoad`, `osSpTaskStartGo`,
+`osDpSetNextBuffer` and the VI framebuffer calls are not implemented. A Fast3D
+port intercepts the finished display list before the RSP would see it, so
+emulating them would be work in service of nothing. Perfect Dark's port omits
+them for the same reason.
+
+## Assets
+
+Unchanged from the rest of the repository: no assets are included or
+redistributed. The port will read them from the player's own ROM at runtime,
+the way Perfect Dark's port does.
