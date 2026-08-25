@@ -20,6 +20,7 @@ ctest --test-dir build/port --output-on-failure
 | `src/libultra.c` — PI DMA against the ROM image | **done** |
 | `src/romdata.c` — assets from the player's ROM | **done, 53 assertions** |
 | `src/sha1.c` — ROM identification | **done** |
+| `src/gbi_walk.c` — display-list decoder/validator | **done, 61 assertions** |
 | `fast3d/` + `src/video.c` — display lists to GPU | not started |
 | `src/audio.c` | not started |
 | `src/input.c` | not started |
@@ -125,6 +126,49 @@ forcibly suspending a host thread mid-`malloc` deadlocks.
 port intercepts the finished display list before the RSP would see it, so
 emulating them would be work in service of nothing. Perfect Dark's port omits
 them for the same reason.
+
+## The renderer gap is three commands
+
+Before vendoring 7.5k lines of Fast3D it was worth checking the claim the whole
+plan rests on: that GoldenEye's display lists are in a format an existing
+translator can decode. They are, almost entirely.
+
+**GoldenEye builds the F3DEX (GBI 1) branch** of `PR/gbi.h` — no `F3DEX_GBI_2`
+define exists anywhere in the build.
+
+**Rare's `G_TRI4` extension is shared with Perfect Dark.** `include/gbi_extension.h`
+adds a packed four-triangle command and redefines `gSP2Triangles` in terms of
+it. GoldenEye's opcode is `G_IMMFIRST-14`; Perfect Dark's is the same value,
+and its Fast3D already has a case for it. This is the single most important
+compatibility result: a stock decoder that only knows `G_TRI1`/`G_TRI2` would
+see almost no geometry at all.
+
+Comparing the 66 distinct GBI macros GoldenEye emits against the opcodes
+Perfect Dark's Fast3D decodes leaves exactly **three** unhandled:
+
+| Command | GoldenEye usage |
+|---|---|
+| `G_MODIFYVTX` | the only `gSPModifyVertex` in the source is commented out |
+| `G_SETBLENDCOLOR` | one call site, `src/boss.c` |
+| `G_SETPRIMDEPTH` | the adjacent line in `src/boss.c` |
+
+So the practical gap is a single adjacent pair in one file. `gbi_walk.c` flags
+all three rather than letting them pass as ordinary traffic.
+
+One trap worth recording: `gbi_extension.h` also defines `G_SETTEX` as `0xc0`,
+which **collides with `G_NOOP`**. The macro that would emit it
+(`gsSPUseTexture`) has no callers, so treating `0xc0` as a no-op is safe today
+— but a backend that starts seeing `0xc0` with a non-zero payload is looking at
+`G_SETTEX`, not a no-op.
+
+Two API notes from building the walker:
+
+- `G_TRI4` slots whose three indices are all zero are **padding**, not
+  degenerate geometry. Counting them inflates every model by up to half.
+- `gbiWalk` takes an explicit command bound. A display list carries no length,
+  only a `G_ENDDL` terminator, so an unterminated one cannot be detected
+  except by refusing to read past a caller-supplied limit — by the time any
+  counter noticed, the walk has already run off the buffer.
 
 ## How assets are read
 

@@ -29,6 +29,7 @@ add_library(ge007_platform STATIC
     src/libultra.c
     src/romdata.c
     src/sha1.c
+    src/gbi_walk.c
 )
 
 # port/include must come FIRST: it carries the strings.h shim that keeps
@@ -91,6 +92,11 @@ if(GEPC_BUILD_TESTS)
     add_test(NAME ge007_libultra COMMAND ge007_port_tests)
     # The blocking-queue and timer tests sleep on purpose.
     set_tests_properties(ge007_libultra PROPERTIES TIMEOUT 120)
+
+    add_executable(ge007_gbi_tests tests/test_gbi_walk.c)
+    target_link_libraries(ge007_gbi_tests PRIVATE ge007_platform)
+    add_test(NAME ge007_gbi_walk COMMAND ge007_gbi_tests)
+    set_tests_properties(ge007_gbi_walk PROPERTIES TIMEOUT 60)
 
     add_executable(ge007_romdata_tests tests/test_romdata.c)
     target_link_libraries(ge007_romdata_tests PRIVATE ge007_platform)
