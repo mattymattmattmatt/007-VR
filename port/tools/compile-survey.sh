@@ -20,7 +20,7 @@ cd "$ROOT" || exit 1
 FLAGS=(
     -fsyntax-only -std=gnu99
     -D_LANGUAGE_C -DGEPC -DVERSION_US -DREFRESH_NTSC
-    -Iport/include
+    -Iport/include -include gepc_prelude.h
     -idirafter . -idirafter include -idirafter include/PR
     -idirafter src -idirafter src/game -idirafter src/libultra
     -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0

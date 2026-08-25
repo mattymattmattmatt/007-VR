@@ -83,6 +83,53 @@ The remaining 51 failures are a long tail rather than one blocker: struct
 members that have moved, a handful of undeclared identifiers, an
 `osSyncPrintf` arity mismatch, and some token-pasting in the model macros.
 
+## What the platform layer still owes the game: nothing
+
+`port/tools/link-inventory.sh` compiles every game translation unit that will
+compile, plus the port layer, and asks the linker what is referenced and never
+defined. It reports **no SDK symbols outstanding**.
+
+Getting there took two corrections worth recording.
+
+**Which SDK sources to replace.** Only the *hardware* layers belong to the
+port: `src/libultra/os/` (threads, scheduler, TLB) and `src/libultra/io/`
+(VI, PI, SI, controllers), plus all of `src/libultrare/`. Excluding the whole
+of `src/libultra/` was too broad and showed up straight away as unresolved
+`gu*` symbols: `gu/` is portable matrix and trig maths (`guPerspective`,
+`guLookAt`), and `audio/` is the sequence player that builds the very Acmd
+list the software microcode consumes. Both are kept and compiled.
+
+**The last 43 symbols.** With the hardware layers excluded, the linker asked
+for 43 more, and they grouped cleanly:
+
+| Group | Treatment |
+|---|---|
+| `osVi*`, `osDp*` | Replaced, not emulated — the renderer intercepts the display list long before either would see anything |
+| `osCont*` | **Real.** joy.c drives it every frame, and the VR layer's synthetic pads travel the same path |
+| `osEeprom*` | **Real**, file-backed — it is the player's save data |
+| TLB, FPU control, SI internals | Hardware-only, stubbed |
+
+`osContInit` reports **two** controllers present on purpose: the 2.4 Goodhead
+control style the VR layer targets reads two pads, and a game that believes
+only one is connected will not offer that style at all.
+
+Two traps found while writing these:
+
+- `osContStartReadData` must post to the caller's message queue. The game
+  blocks on it immediately afterwards, so a read that completed without
+  posting would hang — the same trap as the PI DMA path.
+- `OSContStatus`'s error field is literally named `errno`. Any translation
+  unit that pulls in `<errno.h>` would macro-expand it and break the struct
+  outright, so nothing in the port includes it.
+
+And one real bug, caught by `-Werror=type-limits`: the EEPROM bounds check
+compared a `u8` address against 256, which can never be true. The compiler was
+right that the check was dead — but the *long* read and write variants compute
+a block index that genuinely can run past the end, and narrowing it back to
+`u8` would have wrapped it round to the start, quietly corrupting the
+beginning of the save instead of failing. The range is now checked in `int`
+before any narrowing.
+
 ## What the first end-to-end run found
 
 `ge007-selftest` drives the real stack: it builds a display list in the RDRAM

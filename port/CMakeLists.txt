@@ -32,6 +32,7 @@ add_library(ge007_platform STATIC
     src/gbi_walk.c
     src/gfx_state.c
     src/rdram.c
+    src/libultra_stubs.c
     src/gfx_texture.c
     src/audio.c
     src/audio_abi.c
