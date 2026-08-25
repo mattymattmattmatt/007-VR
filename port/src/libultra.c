@@ -29,6 +29,7 @@
  */
 #include "platform.h"
 #include "romdata.h"
+#include "rdram.h"
 
 #include <pthread.h>
 #include <stdlib.h>
@@ -612,9 +613,16 @@ u32 osVirtualToPhysical(void *v)
     uintptr_t a = (uintptr_t)v;
 
     if (sizeof(uintptr_t) > 4 && (unsigned long long)a > 0xFFFFFFFFULL) {
-        platformPanic("osVirtualToPhysical: %p will not fit in the 32-bit "
-                      "address this API returns. Build the port for 32-bit, "
-                      "or keep game memory below 4 GB.", v);
+        /* Everything the game can see is supposed to live in the RDRAM arena,
+         * which rdram.c places below 4 GB precisely so this cannot happen. A
+         * pointer arriving here from outside it means port-side memory has
+         * leaked into a game structure -- worth failing loudly, because the
+         * alternative is a display list that renders as garbage with no clue
+         * where the bad address came from. */
+        platformPanic("osVirtualToPhysical: %p is outside the RDRAM arena and "
+                      "will not fit in the 32-bit address this API returns. "
+                      "Game-visible allocations must come from rdramAlloc or "
+                      "the game's own pool.", v);
     }
     return (u32)a;
 }

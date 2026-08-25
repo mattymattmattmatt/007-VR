@@ -16,6 +16,7 @@ ctest --test-dir build/port --output-on-failure
 | Piece | State |
 |---|---|
 | `src/system.c` — clock, sleep, paths, logging | **done** |
+| `src/rdram.c` — low-memory arena for game memory | **done, 40 assertions** |
 | `src/libultra.c` — threads, message queues, timers | **done, 236 assertions** |
 | `src/libultra.c` — PI DMA against the ROM image | **done** |
 | `src/romdata.c` — assets from the player's ROM | **done, 53 assertions** |
@@ -80,7 +81,7 @@ identical `-idirafter` tokens into one and leaves `B` stranded as a bare
 argument, silently dropping a directory from the search path. The `SHELL:`
 prefix keeps each flag and its path together.
 
-### 64-bit is the open question
+### 64-bit: settled, with a low arena
 
 `PR/os.h` declares `u32 osVirtualToPhysical(void *)`, because on the N64 every
 address genuinely was 32 bits. The game relies on it: `src/game/model.c` feeds
@@ -90,15 +91,25 @@ On a 64-bit host a heap pointer does not fit. Silently truncating would fill
 display lists with addresses that are wrong in a way nothing detects until
 geometry renders as garbage, so the shim **panics instead of truncating**.
 
-Two ways out, in order of preference:
+**The port builds 64-bit and confines game memory to a low arena.** Perfect
+Dark's port takes the other route and builds for i686; this one keeps the
+renderer, the OpenXR loader and the port itself 64-bit, and instead places
+everything the game can see inside the 8 MB arena in `src/rdram.c`, reserved
+below 4 GB (`MAP_32BIT` on Linux, a base-address walk on Windows). Game
+pointers then fit in a `u32` naturally.
 
-- **Build 32-bit.** Perfect Dark's port sets `TARGET_ARCH i686` and the
-  question disappears.
-- **Arena below 4 GB.** Keep everything the game can see in low memory.
+That avoids multilib and the hunt for a 32-bit VR runtime, and leaves headroom
+for stereo rendering. It also matches what the game already expects:
+`src/boss.c` hands its pool allocator the span from the end of BSS to the TLB
+block — whatever RDRAM is left over — and here that span is simply the tail of
+this arena, carved up by `mempCheckMemflagTokens` exactly as on hardware.
+
+If the arena cannot be placed low, the port refuses to start rather than
+corrupt display lists. `osVirtualToPhysical` keeps its panic as a backstop for
+port-side memory leaking into a game structure.
 
 Fast3D resolves *segmented* addresses through its own segment table, so this
-only has to cover direct pointers. The decision is still open and wants making
-before the renderer work starts.
+only has to cover direct pointers.
 
 ### Deliberate differences from real hardware
 

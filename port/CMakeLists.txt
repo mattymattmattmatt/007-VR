@@ -31,6 +31,7 @@ add_library(ge007_platform STATIC
     src/sha1.c
     src/gbi_walk.c
     src/gfx_state.c
+    src/rdram.c
 )
 
 # port/include must come FIRST: it carries the strings.h shim that keeps
@@ -79,11 +80,14 @@ if(NOT MSVC)
     endif()
 endif()
 
+# 64-bit is the supported configuration. The game's pointers still have to fit
+# in the u32 osVirtualToPhysical returns, which is handled by confining all
+# game-visible memory to the RDRAM arena in src/rdram.c rather than by building
+# 32-bit. See port/README.md.
 if(CMAKE_SIZEOF_VOID_P GREATER 4)
     message(STATUS
-        "ge007 port: building 64-bit. osVirtualToPhysical returns a u32 by "
-        "declaration, so it panics rather than truncating a high pointer. "
-        "A 32-bit target avoids the issue entirely - see port/README.md.")
+        "ge007 port: 64-bit build; game memory is confined to the low RDRAM "
+        "arena so pointers survive osVirtualToPhysical.")
 endif()
 
 if(GEPC_BUILD_TESTS)
@@ -103,6 +107,11 @@ if(GEPC_BUILD_TESTS)
     target_link_libraries(ge007_gfx_tests PRIVATE ge007_platform)
     add_test(NAME ge007_gfx_state COMMAND ge007_gfx_tests)
     set_tests_properties(ge007_gfx_state PROPERTIES TIMEOUT 60)
+
+    add_executable(ge007_rdram_tests tests/test_rdram.c)
+    target_link_libraries(ge007_rdram_tests PRIVATE ge007_platform)
+    add_test(NAME ge007_rdram COMMAND ge007_rdram_tests)
+    set_tests_properties(ge007_rdram PROPERTIES TIMEOUT 60)
 
     add_executable(ge007_romdata_tests tests/test_romdata.c)
     target_link_libraries(ge007_romdata_tests PRIVATE ge007_platform)
