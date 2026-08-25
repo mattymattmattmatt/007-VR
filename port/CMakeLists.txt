@@ -30,6 +30,7 @@ add_library(ge007_platform STATIC
     src/romdata.c
     src/sha1.c
     src/gbi_walk.c
+    src/gfx_state.c
 )
 
 # port/include must come FIRST: it carries the strings.h shim that keeps
@@ -97,6 +98,11 @@ if(GEPC_BUILD_TESTS)
     target_link_libraries(ge007_gbi_tests PRIVATE ge007_platform)
     add_test(NAME ge007_gbi_walk COMMAND ge007_gbi_tests)
     set_tests_properties(ge007_gbi_walk PROPERTIES TIMEOUT 60)
+
+    add_executable(ge007_gfx_tests tests/test_gfx_state.c)
+    target_link_libraries(ge007_gfx_tests PRIVATE ge007_platform)
+    add_test(NAME ge007_gfx_state COMMAND ge007_gfx_tests)
+    set_tests_properties(ge007_gfx_state PROPERTIES TIMEOUT 60)
 
     add_executable(ge007_romdata_tests tests/test_romdata.c)
     target_link_libraries(ge007_romdata_tests PRIVATE ge007_platform)

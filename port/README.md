@@ -21,7 +21,9 @@ ctest --test-dir build/port --output-on-failure
 | `src/romdata.c` — assets from the player's ROM | **done, 53 assertions** |
 | `src/sha1.c` — ROM identification | **done** |
 | `src/gbi_walk.c` — display-list decoder/validator | **done, 61 assertions** |
-| `fast3d/` + `src/video.c` — display lists to GPU | not started |
+| `src/gfx_state.c` — RSP/RDP state machine | **done, 88 assertions** |
+| GPU backend (`gfx_backend.h` implementor) | not started |
+| `src/video.c` — interception at `fr.c` | not started |
 | `src/audio.c` | not started |
 | `src/input.c` | not started |
 
@@ -169,6 +171,36 @@ Two API notes from building the walker:
   only a `G_ENDDL` terminator, so an unterminated one cannot be detected
   except by refusing to read past a caller-supplied limit — by the time any
   counter noticed, the walk has already run off the buffer.
+
+## Renderer structure
+
+The renderer splits in two, and only the first half is GoldenEye-specific:
+
+- **`gfx_state.c`** does the N64 work — segment resolution, the matrix stack,
+  the vertex cache, transforming vertices, and turning Rare's packed `G_TRI4`
+  into triangles. It is testable with no GPU present.
+- **A backend** implements `gfx_backend.h` and only has to know how to draw.
+  It never sees a display list.
+
+Three decoding rules the state machine has to get right, all pinned by tests
+that build their lists with the game's own macros rather than hand-written
+words:
+
+- **`G_TRI1` indices are pre-multiplied by 10** and live in `w1`. GoldenEye
+  builds the branch where that is true; assuming the F3DEX "times two" form
+  yields indices five times too large.
+- **`G_TRI4` indices are raw 4-bit** and cap at vertex 15, which is why
+  `G_TRI1` still exists for the rest of the 32-entry cache. Mixing the two
+  conventions up is the single easiest way to render nothing.
+- **All-zero `G_TRI4` slots are padding.** Drawing them adds a stray triangle
+  at vertex 0 to a large share of the game's models.
+
+The fixed-point matrix format is also worth noting: the N64 splits a 4x4 into
+eight words of integer halves followed by eight of fractional halves. This
+reads them arithmetically out of the `s32`s rather than casting to `s16 *`, so
+the decode does not depend on host byte order. No transpose is needed —
+libultra matrices are row-vector and this layer is column-vector, and a linear
+copy between the two storage orders already is that transpose.
 
 ## How assets are read
 
