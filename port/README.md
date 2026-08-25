@@ -25,7 +25,8 @@ ctest --test-dir build/port --output-on-failure
 | `src/gfx_state.c` — RSP/RDP state machine | **done, 88 assertions** |
 | `src/gfx_texture.c` — N64 texture formats to RGBA8 | **done, 69 assertions** |
 | `src/gfx_gl.c` — OpenGL 3.3 backend | **first pass, builds** |
-| `src/video.c` — interception at `fr.c` | not started |
+| `src/video.c` — window, GL context, frame loop | **done, builds** |
+| SP task interception | **done, 19 assertions** |
 | `src/audio.c` | not started |
 | `src/input.c` | not started |
 
@@ -183,6 +184,32 @@ Two API notes from building the walker:
   only a `G_ENDDL` terminator, so an unterminated one cannot be detected
   except by refusing to read past a caller-supplied limit — by the time any
   counter noticed, the walk has already run off the buffer.
+
+## Where the display list is intercepted
+
+The game builds a display list, wraps it in an `OSTask` and hands it to the
+scheduler, which calls `osSpTaskLoad` / `osSpTaskStartGo`. On hardware the RSP
+would execute it from there. The port intercepts the task instead and sends
+the list to the renderer, which is exactly why GoldenEye's custom microcode
+never matters.
+
+`rspGfxTaskStart` in `src/game/rsp.c` fills in `data_ptr` with the first `Gfx`
+and `data_size` with the list's length in bytes, so the interception gets an
+**exact** command bound rather than trusting the list is terminated. That pairs
+with the bound `gfxStateRun` already takes.
+
+Three things this layer has to get right, each pinned by a test:
+
+- **Dispatch on Load, not on both.** The scheduler calls `osSpTaskLoad` and
+  `osSpTaskStartGo` in sequence; handling both renders every frame twice.
+- **Keep the task types apart.** Feeding an audio task to the triangle decoder
+  would be spectacular, and the two arrive through the same call.
+- **Survive having no handler.** The game submits frames during boot, before
+  video is up.
+
+Routing goes through a registered handler (`gfxhook.h`) rather than calling
+the renderer directly, so `libultra.c` stays free of SDL and GL and the
+interception itself is testable with a mock and no GPU.
 
 ## Renderer structure
 

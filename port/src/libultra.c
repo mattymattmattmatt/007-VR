@@ -30,6 +30,7 @@
 #include "platform.h"
 #include "romdata.h"
 #include "rdram.h"
+#include "gfxhook.h"
 
 #include <pthread.h>
 #include <stdlib.h>
@@ -37,6 +38,7 @@
 
 #include <PR/ultratypes.h>
 #include <PR/os.h>
+#include <PR/sptask.h>
 
 /* libultra exports this and the OS_*_TO_CYCLES macros divide by it. On real
  * hardware osInitialize sets it to OS_CLOCK_RATE and then scales it by 3/4,
@@ -578,6 +580,90 @@ void osCreatePiManager(OSPri pri, OSMesgQueue *mq, OSMesg *msg, s32 count)
     if (mq && msg && count > 0) {
         osCreateMesgQueue(mq, msg, count);
     }
+}
+
+/* ------------------------------------------------------------- SP tasks */
+
+static gfx_task_fn g_gfx_handler;
+static void       *g_gfx_user;
+static aud_task_fn g_aud_handler;
+static void       *g_aud_user;
+static unsigned    g_gfx_tasks;
+static unsigned    g_aud_tasks;
+
+void spSetGfxTaskHandler(gfx_task_fn fn, void *user)
+{
+    g_gfx_handler = fn;
+    g_gfx_user = user;
+}
+
+void spSetAudTaskHandler(aud_task_fn fn, void *user)
+{
+    g_aud_handler = fn;
+    g_aud_user = user;
+}
+
+unsigned spGfxTaskCount(void) { return g_gfx_tasks; }
+unsigned spAudTaskCount(void) { return g_aud_tasks; }
+void spResetTaskCounts(void)  { g_gfx_tasks = 0; g_aud_tasks = 0; }
+
+/* The RSP never runs here. rspGfxTaskStart in src/game/rsp.c fills in
+ * data_ptr with the first Gfx and data_size with the list's length in bytes,
+ * so the interception gets an exact bound rather than having to trust the
+ * list is terminated.
+ *
+ * Dispatch happens on Load rather than StartGo because the scheduler calls
+ * both in sequence and Load is where the task becomes fully described;
+ * handling it twice would render every frame twice. */
+static void dispatch_task(OSTask *task)
+{
+    if (!task) {
+        return;
+    }
+
+    switch (task->t.type) {
+    case M_GFXTASK:
+        g_gfx_tasks++;
+        if (g_gfx_handler) {
+            g_gfx_handler(task->t.data_ptr, task->t.data_size, g_gfx_user);
+        }
+        break;
+
+    case M_AUDTASK:
+        g_aud_tasks++;
+        if (g_aud_handler) {
+            g_aud_handler(task->t.data_ptr, task->t.data_size, g_aud_user);
+        }
+        break;
+
+    default:
+        /* Video and HVQ tasks exist in the SDK but GoldenEye does not use
+         * them; ignoring them is correct rather than merely convenient. */
+        break;
+    }
+}
+
+void osSpTaskLoad(OSTask *task)
+{
+    dispatch_task(task);
+}
+
+void osSpTaskStartGo(OSTask *task)
+{
+    /* Already dispatched by osSpTaskLoad. */
+    (void)task;
+}
+
+void osSpTaskYield(void)
+{
+}
+
+OSYieldResult osSpTaskYielded(OSTask *task)
+{
+    (void)task;
+    /* Nothing here ever yields: the task completes synchronously inside
+     * osSpTaskLoad, so by the time anything asks, it is done. */
+    return 0;
 }
 
 /* ------------------------------------------------- hardware-only no-ops */
