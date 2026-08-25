@@ -23,7 +23,8 @@ ctest --test-dir build/port --output-on-failure
 | `src/sha1.c` — ROM identification | **done** |
 | `src/gbi_walk.c` — display-list decoder/validator | **done, 61 assertions** |
 | `src/gfx_state.c` — RSP/RDP state machine | **done, 88 assertions** |
-| GPU backend (`gfx_backend.h` implementor) | not started |
+| `src/gfx_texture.c` — N64 texture formats to RGBA8 | **done, 69 assertions** |
+| `src/gfx_gl.c` — OpenGL 3.3 backend | **first pass, builds** |
 | `src/video.c` — interception at `fr.c` | not started |
 | `src/audio.c` | not started |
 | `src/input.c` | not started |

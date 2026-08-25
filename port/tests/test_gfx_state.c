@@ -58,6 +58,9 @@ typedef struct {
     int        geometry_mode_calls;
     unsigned   last_geometry_mode;
     int        prim_color_calls;
+    int        tex_scale_calls;
+    float      last_tex_s, last_tex_t;
+    int        last_tex_tile, last_tex_on;
     int        frames_begun;
     int        frames_ended;
 } recorder;
@@ -99,6 +102,17 @@ static void rec_prim(void *user, unsigned char a, unsigned char b,
     r->prim_color_calls++;
 }
 
+static void rec_tex_scale(void *user, float s, float t, int level, int tile, int on)
+{
+    recorder *r = (recorder *)user;
+    (void)level;
+    r->tex_scale_calls++;
+    r->last_tex_s = s;
+    r->last_tex_t = t;
+    r->last_tex_tile = tile;
+    r->last_tex_on = on;
+}
+
 static void rec_begin(void *user) { ((recorder *)user)->frames_begun++; }
 static void rec_end(void *user)   { ((recorder *)user)->frames_ended++; }
 
@@ -113,6 +127,7 @@ static gfx_state *make_state(recorder *r)
     be.unsupported = rec_unsupported;
     be.set_geometry_mode = rec_geom;
     be.set_prim_color = rec_prim;
+    be.set_texture_scale = rec_tex_scale;
     be.begin_frame = rec_begin;
     be.end_frame = rec_end;
     return gfxStateCreate(&be);
@@ -474,6 +489,40 @@ static void test_state_passthrough(void)
     gfxStateDestroy(st);
 }
 
+static void test_texture_scale(void)
+{
+    recorder r;
+    gfx_state *st;
+    Gfx *p;
+
+    printf("gfx: gSPTexture scale reaches the backend\n");
+
+    st = make_state(&r);
+    gfxStateBeginFrame(st);
+
+    p = g_dl;
+    gSPTexture(p++, 0x8000, 0x8000, 0, G_TX_RENDERTILE, G_ON);
+    gSPEndDisplayList(p++);
+
+    CHECK(gfxStateRun(st, g_dl, 64) == 0);
+    CHECK(r.tex_scale_calls == 1);
+    /* 0x8000 is exactly a half. */
+    CHECK(r.last_tex_s > 0.499f && r.last_tex_s < 0.501f);
+    CHECK(r.last_tex_t > 0.499f && r.last_tex_t < 0.501f);
+    CHECK(r.last_tex_tile == G_TX_RENDERTILE);
+    CHECK(r.last_tex_on != 0);
+
+    /* Turning texturing off must be visible, not just a scale of zero. */
+    p = g_dl;
+    gSPTexture(p++, 0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_OFF);
+    gSPEndDisplayList(p++);
+    CHECK(gfxStateRun(st, g_dl, 64) == 0);
+    CHECK(r.last_tex_on == 0);
+    CHECK(r.last_tex_s > 0.99f);
+
+    gfxStateDestroy(st);
+}
+
 static void test_malformed(void)
 {
     recorder r;
@@ -512,6 +561,7 @@ int main(void)
     test_tri4_through_state();
     test_unsupported_reaches_backend();
     test_state_passthrough();
+    test_texture_scale();
     test_malformed();
 
     printf("\n%d checks, %d failure(s)\n", g_checks, g_failures);

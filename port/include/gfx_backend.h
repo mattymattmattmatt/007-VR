@@ -48,6 +48,11 @@ typedef struct gfx_backend {
                      int tmem, int palette, int cms, int cmt,
                      int masks, int maskt, int shifts, int shiftt);
     void (*set_tile_size)(void *user, int tile, int uls, int ult, int lrs, int lrt);
+
+    /* gSPTexture. s and t arrive as the 16-bit fixed-point scales the command
+     * carries, already converted to floats. `on` disables texturing when 0. */
+    void (*set_texture_scale)(void *user, float s, float t,
+                              int level, int tile, int on);
     void (*load_block)(void *user, int tile, int uls, int ult, int lrs, int dxt);
     void (*load_tlut)(void *user, int tile, int count);
 

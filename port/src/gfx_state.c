@@ -387,6 +387,20 @@ int gfxStateRun(gfx_state *st, const void *dl, unsigned max_commands)
             }
             break;
 
+        case (unsigned char)G_TEXTURE:
+            if (st->backend.set_texture_scale) {
+                /* The scales are u16 fixed point where 0xFFFF is very nearly
+                 * 1.0, so dividing by 65536 rather than 65535 keeps the
+                 * common 0x8000 case exactly a half. */
+                st->backend.set_texture_scale(st->backend.user,
+                                              (float)((w1 >> 16) & 0xFFFFu) / 65536.0f,
+                                              (float)(w1 & 0xFFFFu) / 65536.0f,
+                                              (int)((w0 >> 11) & 0x07u),
+                                              (int)((w0 >> 8) & 0x07u),
+                                              (int)(w0 & 0xFFu));
+            }
+            break;
+
         case (unsigned char)G_SETCOMBINE:
             if (st->backend.set_combine) {
                 st->backend.set_combine(st->backend.user, w0, w1);

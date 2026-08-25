@@ -32,6 +32,7 @@ add_library(ge007_platform STATIC
     src/gbi_walk.c
     src/gfx_state.c
     src/rdram.c
+    src/gfx_texture.c
 )
 
 # port/include must come FIRST: it carries the strings.h shim that keeps
@@ -108,6 +109,11 @@ if(GEPC_BUILD_TESTS)
     add_test(NAME ge007_gfx_state COMMAND ge007_gfx_tests)
     set_tests_properties(ge007_gfx_state PROPERTIES TIMEOUT 60)
 
+    add_executable(ge007_texture_tests tests/test_gfx_texture.c)
+    target_link_libraries(ge007_texture_tests PRIVATE ge007_platform)
+    add_test(NAME ge007_texture COMMAND ge007_texture_tests)
+    set_tests_properties(ge007_texture PROPERTIES TIMEOUT 60)
+
     add_executable(ge007_rdram_tests tests/test_rdram.c)
     target_link_libraries(ge007_rdram_tests PRIVATE ge007_platform)
     add_test(NAME ge007_rdram COMMAND ge007_rdram_tests)
@@ -120,4 +126,30 @@ if(GEPC_BUILD_TESTS)
     add_test(NAME ge007_romdata COMMAND ge007_romdata_tests
              WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
     set_tests_properties(ge007_romdata PROPERTIES TIMEOUT 60)
+endif()
+
+# --------------------------------------------------------------- GL backend
+
+# The only part of the renderer that needs a GPU. Everything with a right
+# answer -- display-list decoding, the matrix stack, texture conversion --
+# lives in ge007_platform and is tested headlessly, so this staying optional
+# costs no coverage.
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_check_modules(GEPC_SDL2 IMPORTED_TARGET sdl2)
+endif()
+
+if(GEPC_SDL2_FOUND)
+    add_library(ge007_gfx_gl STATIC src/gfx_gl.c)
+    target_link_libraries(ge007_gfx_gl PUBLIC ge007_platform PkgConfig::GEPC_SDL2)
+    if(NOT MSVC)
+        target_compile_options(ge007_gfx_gl PRIVATE -Wall -Wextra)
+        if(GEPC_WERROR)
+            target_compile_options(ge007_gfx_gl PRIVATE -Werror)
+        endif()
+    endif()
+else()
+    message(STATUS
+        "ge007 port: SDL2 not found; skipping the OpenGL backend. "
+        "The decoder and its tests build regardless.")
 endif()
