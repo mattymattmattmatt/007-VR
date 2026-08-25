@@ -136,15 +136,40 @@ GoldenEye calls **88** distinct libultra functions. Perfect Dark's PC shim is
 That the whole shim fits in 487 lines for Perfect Dark is the useful signal:
 the port replaces subsystems rather than emulating hardware.
 
+### The renderer gap, measured
+
+The compatibility question has now been answered by measurement rather than
+assumption, and the answer is good.
+
+GoldenEye builds the **F3DEX (GBI 1)** branch of `PR/gbi.h` — no `F3DEX_GBI_2`
+define exists anywhere in the build.
+
+Rare's custom **`G_TRI4`** packed four-triangle command, added in
+`include/gbi_extension.h` and used to redefine `gSP2Triangles`, sits at the
+*same opcode Perfect Dark uses*, and Perfect Dark's Fast3D already decodes it.
+This was the main risk: a stock decoder knowing only `G_TRI1`/`G_TRI2` would
+render almost no geometry at all.
+
+Comparing the 66 distinct GBI macros GoldenEye emits against the opcodes that
+renderer handles leaves exactly **three** unhandled: `G_MODIFYVTX` (whose only
+use in the source is commented out), and `G_SETBLENDCOLOR` and
+`G_SETPRIMDEPTH`, which occur as one adjacent pair in `src/boss.c`.
+
+`port/src/gbi_walk.c` decodes and validates all of this with 61 assertions.
+`port/README.md` has the full breakdown, including the `G_SETTEX`/`G_NOOP`
+opcode collision to watch for.
+
 ### Work plan for layer 2
 
-1. `port/src/libultra.c` — threads, message queues and timers over real OS
-   primitives; stub the boot and TLB entry points.
-2. `port/src/romdata.c` — load assets from the player's own GoldenEye ROM at
-   runtime, mirroring how Perfect Dark's port does it. Same asset rule as the
-   rest of this repository: no assets are redistributed.
+1. ~~`port/src/libultra.c` — threads, message queues and timers over real OS
+   primitives; stub the boot and TLB entry points.~~ **Done**, 236 assertions.
+2. ~~`port/src/romdata.c` — load assets from the player's own GoldenEye ROM at
+   runtime.~~ **Done**, 53 assertions. PI DMA now reads from the player's ROM,
+   so the game's existing asset pipeline works unchanged. No assets are
+   redistributed.
 3. `port/fast3d/` — bring in Fast3D and drive it from a `video.c` that
-   intercepts the display list where `src/fr.c` builds it.
+   intercepts the display list where `src/fr.c` builds it. The decoding half
+   is done (`gbi_walk.c`, 61 assertions); what remains is the GPU backend.
 4. `port/src/audio.c` — the sequence and sample playback in
    `src/libultra/audio` over SDL audio. Independent of VR and can come last.
 5. Move `vr/` to `port/vr/` once the port layer exists, matching the layout
