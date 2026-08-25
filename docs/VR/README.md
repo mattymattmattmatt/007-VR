@@ -10,17 +10,18 @@ player movement code.
 
 ## Status, honestly
 
-The VR layer itself is written, builds warning-clean, and is covered by 370
-headless assertions. **The game is not yet playable in VR**, and the reason is
-worth being precise about:
+The VR layer is written, builds warning-clean, and is covered by 370 headless
+assertions. **The game is not yet playable in VR**, because this repository
+builds an N64 ROM and has no PC target — nothing in it draws a pixel on a
+desktop GPU.
 
-This repository is a *matching decompilation*. It builds an N64 ROM with a MIPS
-toolchain — it has no PC target at all. Nothing in it draws a pixel on a
-desktop GPU: rendering goes out as N64 display lists to be executed by RSP
-microcode (`rsp/graphics/gmain.s`). A VR headset needs a PC renderer, and one
-does not exist here yet.
+But the remaining path is now well understood, because somebody has already
+walked it for the sister game.
+[Alex-LeTux/perfect_dark_vr](https://github.com/Alex-LeTux/perfect_dark_vr) is
+a working VR port of Perfect Dark, and it got there in three layers: the
+decomp, a native PC port (`port/`), then an OpenXR fork (`port/vr/`).
 
-So the work splits cleanly in two:
+GoldenEye has layer 1. This repository is layer 3. Layer 2 is the gap.
 
 | Piece | State |
 |---|---|
@@ -31,13 +32,20 @@ So the work splits cleanly in two:
 | Comfort: snap turn, vignette, recentre, haptics | **done** |
 | Game-side hooks, inert without `GE_VR` | **done** |
 | Calibration harness you can run in the headset | **done** |
-| PC platform layer (libultra shim) | **not started** |
-| Graphics backend (display lists → GPU) | **not started** |
+| PC platform layer (libultra shim, scheduler, ROM assets) | **not started — scoped** |
+| Graphics backend (Fast3D over the display lists) | **not started — scoped** |
 | Audio backend | **not started** |
 
-The two "not started" rows are the large ones, and they are a port project in
-their own right rather than a VR problem. [Architecture.md](Architecture.md)
-lays out what each involves.
+"Scoped" rather than "unknown": Perfect Dark's entire libultra shim is 487
+lines and already covers 38 of the 88 libultra functions GoldenEye calls, and
+its Fast3D renderer is ~7.5k lines that GoldenEye's stock-GBI display lists
+should feed directly. [Architecture.md](Architecture.md) has the measured
+breakdown and the work plan.
+
+One correction worth flagging, since an earlier version of these docs said
+otherwise: GoldenEye's custom RSP microcode is **not** a blocker. A Fast3D port
+intercepts the display list and never runs the microcode at all — Perfect Dark
+has custom microcode too, and its port simply bypasses it.
 
 ## What you can run today
 

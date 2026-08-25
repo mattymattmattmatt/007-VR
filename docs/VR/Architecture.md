@@ -80,47 +80,92 @@ statement in the wrong place changes the ROM.
 
 ## What is left
 
-### 1. PC platform layer
+Updated after studying [Alex-LeTux/perfect_dark_vr](https://github.com/Alex-LeTux/perfect_dark_vr),
+a working VR port of Perfect Dark. It is the proof that this whole approach
+works, and it corrects an assumption made earlier in this document.
 
-The decomp targets N64 hardware through libultra: `osCreateThread`,
-`osSendMesg`, `osViSwapBuffer`, PI/SI DMA, the scheduler in `src/sched.c`. A PC
-build needs those backed by real threads, queues and timers. It is a large but
-well-understood job — the sister Perfect Dark decomp has an established PC port
-that took this route, and the two engines share ancestry.
+### The proven recipe
 
-### 2. Graphics backend
+Perfect Dark got to VR in three layers:
 
-The real work. The engine emits N64 display lists executed by RSP microcode
-(`rsp/graphics/gmain.s`). A PC renderer has to consume those display lists and
-translate them to GPU draw calls: matrix stack, vertex cache, the combiner,
-texture formats (CI4/CI8/IA/RGBA16), and the fog and Z modes the game leans on.
+1. **The decomp** — `n64decomp` Perfect Dark, 100% complete.
+2. **A native PC port** — a `port/` directory holding the platform layer
+   (`port/src/libultra.c`, `pdsched.c`, `audio.c`, `video.c`, `romdata.c`) and
+   a Fast3D renderer (`port/fast3d/`, ~7.5k lines) that turns N64 display
+   lists into GPU draw calls. Assets are read at runtime from the player's own
+   ROM.
+3. **A VR fork** — `port/vr/`, ~5.5k lines of OpenXR, targeting both PCVR and
+   Quest standalone. MIT licensed, as is the port it builds on.
 
-GoldenEye uses custom microcode rather than stock F3DEX2, so an off-the-shelf
-translator will not drop straight in — expect to handle its command set
-specifically. This is the single largest remaining item and the one that gates
-"playable".
+GoldenEye already has layer 1, and this repository now has layer 3 (`vr/`,
+~6.2k lines). **Layer 2 is the entire gap.**
 
-Once it exists, the VR layer needs only that it can render to a supplied
-framebuffer with a supplied projection, which is what the hooks already pass.
+### Correction: the microcode is not a blocker
 
-### 3. Audio backend
+An earlier revision of this document said GoldenEye's custom RSP microcode
+meant "an off-the-shelf translator will not drop straight in". That conclusion
+was wrong, and the Perfect Dark port is the counter-example.
 
-The sequence and sample playback in `src/libultra/audio` targets the N64's
-audio DSP. Needs an equivalent over SDL audio or similar. Independent of VR.
+Perfect Dark has custom microcode too — `src/rsp/gsp.s`, `asp.s`, `rspboot.s`,
+the same situation as this repository's `rsp/graphics/gmain.s`. Its PC port
+does not run any of it. `port/src/video.c` intercepts the finished display
+list and hands it to `gfx_run()`; the RSP is bypassed entirely rather than
+emulated. What matters is the *command format* of the display list, not the
+microcode that would have executed it — and GoldenEye builds its lists with
+the stock GBI macros (`gSPDisplayList`, `gSPVertex` in `src/game/model.c`),
+which is exactly what Fast3D already consumes.
 
-### 4. Things worth doing once it runs
+So the renderer is a porting job, not a research problem.
+
+### Measured size of the gap
+
+GoldenEye calls **88** distinct libultra functions. Perfect Dark's PC shim is
+**487 lines** and already covers **38** of them by name. Of the 50 remaining:
+
+- **12** are boot, TLB, logging or dev-hardware entry points
+  (`osInitialize`, `osMapTLBRdb`, `osLeoDiskInit`, `osReadHost`) that a PC
+  build stubs rather than implements.
+- A further group — `osSpTaskLoad`, `osSpTaskStartGo`, `osDpSetNextBuffer`,
+  `osViGetCurrentFramebuffer` — are precisely the ones a Fast3D port
+  *replaces* wholesale, because the display list is intercepted before the
+  RSP/RDP would ever see it. Perfect Dark does not implement them either.
+- What genuinely needs writing is the scheduler (`osCreateScheduler`,
+  `osSc*`), PI DMA for ROM reads (`osPiRaw*`, `osEPiRaw*`), timers, and the
+  controller-pak and rumble paths (`osPfs*`, `osMotor*`).
+
+That the whole shim fits in 487 lines for Perfect Dark is the useful signal:
+the port replaces subsystems rather than emulating hardware.
+
+### Work plan for layer 2
+
+1. `port/src/libultra.c` — threads, message queues and timers over real OS
+   primitives; stub the boot and TLB entry points.
+2. `port/src/romdata.c` — load assets from the player's own GoldenEye ROM at
+   runtime, mirroring how Perfect Dark's port does it. Same asset rule as the
+   rest of this repository: no assets are redistributed.
+3. `port/fast3d/` — bring in Fast3D and drive it from a `video.c` that
+   intercepts the display list where `src/fr.c` builds it.
+4. `port/src/audio.c` — the sequence and sample playback in
+   `src/libultra/audio` over SDL audio. Independent of VR and can come last.
+5. Move `vr/` to `port/vr/` once the port layer exists, matching the layout
+   that Perfect Dark's VR fork already proves out.
+
+Both Perfect Dark's port and its VR fork are MIT licensed, so adapting the
+platform layer is permitted with attribution. The engine-specific parts
+(`romdata`, asset formats, the `fr.c` interception point) are GoldenEye's own
+and have to be written against this codebase.
+
+### Still worth doing once it runs
 
 - **HUD.** The 2D HUD draws in screen space, which is painful in a headset.
-  `hud_distance` and `hud_scale` exist for projecting it onto a floating panel;
-  the panel itself needs the renderer first.
-- **World scale.** `world_scale = 100` is the starting estimate from
-  `eyeheight` being a few hundred units. Measure it properly with the calibrate
-  tool and correct the default.
+  `hud_distance` and `hud_scale` exist for projecting it onto a floating panel.
+- **World scale.** `world_scale = 100` is an estimate from `eyeheight`
+  magnitudes. Measure it with the calibrate tool and correct the default.
 - **Pitch sign.** `GEVR_ENGINE_PITCH_SIGN` in `gevr_engine.c` encodes which way
-  the engine counts pitch. The decomp does not state it unambiguously; confirm
-  it against real hardware and remove the ambiguity.
-- **Weapon models.** Rendering the gun on the right controller instead of
-  bolted to the view would want a hook near `bondinv`/`gunfire` model drawing.
+  the engine counts pitch. Confirm against real hardware.
+- **Quest standalone.** Perfect Dark's VR fork runs on-headset as well as over
+  PCVR. Nothing in `vr/` prevents it, but it needs an Android build and a GLES
+  path in the renderer.
 
 ## Testing
 
