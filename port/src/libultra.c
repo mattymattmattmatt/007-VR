@@ -28,6 +28,7 @@
  *   runs, the contention is irrelevant and the correctness is easy to see.
  */
 #include "platform.h"
+#include "romdata.h"
 
 #include <pthread.h>
 #include <stdlib.h>
@@ -493,6 +494,89 @@ OSTime osGetTime(void)
 u32 osGetCount(void)
 {
     return (u32)ns_to_cycles(platformGetTimeNs());
+}
+
+/* ------------------------------------------------------------- PI / DMA */
+
+/* The game reads every asset through romCopy() in src/ramrom.c, which is
+ * osPiStartDma followed by a blocking osRecvMesg. Pointing that at the ROM
+ * image loaded by romdata is what makes the whole asset pipeline -- the file
+ * table, the segment layout, rz decompression -- work unchanged.
+ *
+ * The completion message is posted on EVERY path, including failure. romCopy
+ * blocks on it unconditionally, so a read that quietly returned without
+ * posting would hang the game forever instead of showing a bad texture. */
+s32 osPiStartDma(OSIoMesg *mb, s32 pri, s32 direction, u32 devAddr,
+                 void *dramAddr, u32 nbytes, OSMesgQueue *mq)
+{
+    long offset;
+
+    (void)pri;
+
+    if (mb) {
+        mb->devAddr = devAddr;
+        mb->dramAddr = dramAddr;
+        mb->size = nbytes;
+    }
+
+    if (direction == OS_READ && dramAddr && nbytes) {
+        offset = romdataAddrToOffset(devAddr);
+        if (offset < 0) {
+            platformLog("PI read from 0x%08x is not cartridge space", devAddr);
+            memset(dramAddr, 0, nbytes);
+        } else if (romdataRead((unsigned)offset, dramAddr, nbytes) != 0) {
+            /* Zero rather than leave the buffer undefined: garbage in a
+             * display list is far harder to diagnose than empty geometry. */
+            memset(dramAddr, 0, nbytes);
+        }
+    }
+    /* OS_WRITE targets the cartridge, which only meant anything on the
+     * development hardware. Accepted and dropped. */
+
+    if (mq) {
+        osSendMesg(mq, (OSMesg)mb, OS_MESG_NOBLOCK);
+    }
+    return 0;
+}
+
+s32 osPiRawStartDma(s32 direction, u32 devAddr, void *dramAddr, u32 nbytes)
+{
+    return osPiStartDma(NULL, OS_MESG_PRI_NORMAL, direction, devAddr,
+                        dramAddr, nbytes, NULL);
+}
+
+s32 osPiRawReadIo(u32 devAddr, u32 *data)
+{
+    long offset = romdataAddrToOffset(devAddr);
+    unsigned char b[4];
+
+    if (!data) {
+        return -1;
+    }
+    if (offset < 0 || romdataRead((unsigned)offset, b, 4) != 0) {
+        *data = 0;
+        return -1;
+    }
+    /* The cartridge bus is big endian regardless of what the host is. */
+    *data = ((u32)b[0] << 24) | ((u32)b[1] << 16) | ((u32)b[2] << 8) | (u32)b[3];
+    return 0;
+}
+
+s32 osPiRawWriteIo(u32 devAddr, u32 data)
+{
+    (void)devAddr; (void)data;
+    return 0;
+}
+
+void osCreatePiManager(OSPri pri, OSMesgQueue *mq, OSMesg *msg, s32 count)
+{
+    /* There is no PI queue to service here: osPiStartDma completes inline.
+     * The queue the game hands over still has to be a working queue, because
+     * it will post to it. */
+    (void)pri;
+    if (mq && msg && count > 0) {
+        osCreateMesgQueue(mq, msg, count);
+    }
 }
 
 /* ------------------------------------------------- hardware-only no-ops */

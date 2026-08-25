@@ -17,7 +17,9 @@ ctest --test-dir build/port --output-on-failure
 |---|---|
 | `src/system.c` — clock, sleep, paths, logging | **done** |
 | `src/libultra.c` — threads, message queues, timers | **done, 236 assertions** |
-| `src/romdata.c` — assets from the player's ROM | not started |
+| `src/libultra.c` — PI DMA against the ROM image | **done** |
+| `src/romdata.c` — assets from the player's ROM | **done, 53 assertions** |
+| `src/sha1.c` — ROM identification | **done** |
 | `fast3d/` + `src/video.c` — display lists to GPU | not started |
 | `src/audio.c` | not started |
 | `src/input.c` | not started |
@@ -123,6 +125,33 @@ forcibly suspending a host thread mid-`malloc` deadlocks.
 port intercepts the finished display list before the RSP would see it, so
 emulating them would be work in service of nothing. Perfect Dark's port omits
 them for the same reason.
+
+## How assets are read
+
+The port does **not** reimplement GoldenEye's file table, segment layout or rz
+decompression. All of that already exists in the game and works; it just
+expects to reach the data over PI DMA from a cartridge.
+
+So `romdata.c` loads the player's ROM into memory and `osPiStartDma` reads out
+of it. `romCopy()` in `src/ramrom.c` — which every asset path funnels
+through — then behaves exactly as it did on hardware, and the entire asset
+pipeline comes along for free.
+
+Three details worth keeping:
+
+- **The completion message is posted on every path, including failure.**
+  `romCopy()` does a DMA and then blocks on `osRecvMesg` unconditionally. A
+  failed read that quietly returned without posting would hang the game
+  forever rather than show a bad texture. There is a test for this.
+- **Failed reads zero the destination** instead of leaving it undefined.
+  Garbage in a display list is far harder to diagnose than empty geometry.
+- **Unrecognised ROMs warn rather than refuse.** The three known SHA-1s come
+  from the `ge007.*.sha1` files at the repository root. A romhack or an
+  unlisted revision may well work, so the loader says what it found and
+  carries on.
+
+All three dump formats are accepted — z64, v64 and n64 — and normalised to
+big-endian on load, decided from the header magic rather than the extension.
 
 ## Assets
 

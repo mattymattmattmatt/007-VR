@@ -27,6 +27,8 @@ find_package(Threads REQUIRED)
 add_library(ge007_platform STATIC
     src/system.c
     src/libultra.c
+    src/romdata.c
+    src/sha1.c
 )
 
 # port/include must come FIRST: it carries the strings.h shim that keeps
@@ -89,4 +91,12 @@ if(GEPC_BUILD_TESTS)
     add_test(NAME ge007_libultra COMMAND ge007_port_tests)
     # The blocking-queue and timer tests sleep on purpose.
     set_tests_properties(ge007_libultra PROPERTIES TIMEOUT 120)
+
+    add_executable(ge007_romdata_tests tests/test_romdata.c)
+    target_link_libraries(ge007_romdata_tests PRIVATE ge007_platform)
+    # Writes a small synthetic ROM into the working directory, so run it
+    # somewhere writable rather than the source tree.
+    add_test(NAME ge007_romdata COMMAND ge007_romdata_tests
+             WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+    set_tests_properties(ge007_romdata PROPERTIES TIMEOUT 60)
 endif()
