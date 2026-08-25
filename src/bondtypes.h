@@ -3108,10 +3108,22 @@ typedef union
     } AutogunRecord;
 
     // PROPDEF_CCTV (6)
+    /* IDO let a struct's own member shadow one promoted out of an inherited
+     * (anonymous) struct, so CCTVRecord's `pad` -- the pad the camera looks
+     * at -- hides ObjectRecord's, which is the pad it stands on. GCC rejects
+     * the duplicate name outright, so the PC build renames the shadowing
+     * member; setupCctv is the only code that reads it. Both fields keep
+     * their ROM offsets (0x6 and 0x80) either way, and without GEPC this
+     * expands to exactly the tokens that were here before. */
+    #ifdef GEPC
+        #define CCTV_LOOKPAD lookpad
+    #else
+        #define CCTV_LOOKPAD pad
+    #endif
     typedef struct CCTVRecord
     {
         inherits ObjectRecord;
-        s32      pad; // lookpad
+        s32      CCTV_LOOKPAD; // lookpad
         Mtxf     unk84;
         f32 unkC4;
         f32 unkC8;

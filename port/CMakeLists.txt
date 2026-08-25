@@ -59,6 +59,23 @@ target_compile_options(ge007_platform PUBLIC
 # PR/ultratypes.h declares nothing at all without this.
 target_compile_definitions(ge007_platform PUBLIC _LANGUAGE_C)
 
+# The game builds its type hierarchy on `#define inherits struct`, so a child
+# record starts with an unnamed member carrying a tag:
+#
+#     typedef struct WeaponObjRecord { inherits ObjectRecord; ... }
+#
+# That is the anonymous-member extension IDO had, and it is what makes
+# wep->type reach ObjectRecord's field. Standard C only allows an anonymous
+# member when the struct is defined inline without a tag, so plain GCC treats
+# the line as a stray declaration, silently contributes no members, and every
+# inherited field then fails with "has no member named". -fms-extensions
+# restores IDO's behaviour. It affects name lookup only -- an unnamed member
+# is laid out exactly as a named one of the same type would be -- so record
+# offsets are unchanged.
+if(NOT MSVC)
+    target_compile_options(ge007_platform PUBLIC -fms-extensions)
+endif()
+
 # glibc's fortified headers *define* bcopy and bzero as inline functions taking
 # size_t, and PR/os.h declares the same names taking int. That is an outright
 # conflict, and it arrives through pthread.h -> features.h ->

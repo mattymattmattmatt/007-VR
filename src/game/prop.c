@@ -642,17 +642,17 @@ void setupCctv(s32 arg0, CCTVRecord *arg1, s32 cmdindex)
 
     domakedefaultobj(arg0, (struct ObjectRecord*)arg1, cmdindex);
 
-    if (arg1->pad >= 0)
+    if (arg1->CCTV_LOOKPAD >= 0)
     {
         temp_a2 = (struct coord3d*)arg1->model->obj->Switches[0]->Data;
 
-        if (isNotBoundPad(arg1->pad))
+        if (isNotBoundPad(arg1->CCTV_LOOKPAD))
         {
-            sp50 = &g_CurrentSetup.pads[arg1->pad];
+            sp50 = &g_CurrentSetup.pads[arg1->CCTV_LOOKPAD];
         }
         else
         {
-            sp50 = (struct PadRecord *)&g_CurrentSetup.boundpads[getBoundPadNum(arg1->pad)];
+            sp50 = (struct PadRecord *)&g_CurrentSetup.boundpads[getBoundPadNum(arg1->CCTV_LOOKPAD)];
         }
 
         sp44.f[0] = temp_a2->f[0];

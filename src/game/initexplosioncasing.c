@@ -4,7 +4,13 @@
 #include "explosion.h"
 
 #ifndef DEBUG
-    #define osSyncPrintf()
+    /* Call sites pass arguments, so a zero-parameter no-op is an arity error
+     * wherever DEBUG is off. The ROM build defines DEBUG and never hits it. */
+    #ifdef GEPC
+        #define osSyncPrintf(...)
+    #else
+        #define osSyncPrintf()
+    #endif
 #endif
 
 void alloc_explosion_smoke_casing_scorch_impact_buffers(void)

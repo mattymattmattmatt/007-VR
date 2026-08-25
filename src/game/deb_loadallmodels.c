@@ -11,7 +11,13 @@
 #include <macro.h>
 
 #ifndef DEBUG
-    #define osSyncPrintf()
+    /* Call sites pass arguments, so a zero-parameter no-op is an arity error
+     * wherever DEBUG is off. The ROM build defines DEBUG and never hits it. */
+    #ifdef GEPC
+        #define osSyncPrintf(...)
+    #else
+        #define osSyncPrintf()
+    #endif
 #endif
 
 //i belong in a header, probably to another file

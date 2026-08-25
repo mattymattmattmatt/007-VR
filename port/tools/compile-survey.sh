@@ -24,13 +24,21 @@ FLAGS=(
     -idirafter . -idirafter include -idirafter include/PR
     -idirafter src -idirafter src/game -idirafter src/libultra
     -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0
+    -fms-extensions
     -w
 )
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-find src -name '*.c' | sort > "$tmp/files"
+# src/libultra/os, src/libultra/io and all of src/libultrare are the N64
+# hardware layers; port/src/libultra.c replaces them, so the PC build never
+# compiles them and counting them would misstate the remaining work.
+find src -name '*.c' \
+    ! -path 'src/libultra/os/*' \
+    ! -path 'src/libultra/io/*' \
+    ! -path 'src/libultrare/*' \
+    | sort > "$tmp/files"
 total=$(wc -l < "$tmp/files")
 
 while read -r f; do

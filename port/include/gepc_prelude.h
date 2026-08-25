@@ -15,8 +15,11 @@
 #ifndef GEPC_PRELUDE_H
 #define GEPC_PRELUDE_H
 
-/* Pull libc's math.h in first, so the guards below see whatever it defines. */
+/* Pull libc's math.h and float.h in first, so the guards below see whatever
+ * they define. The repository's math.h carries FLT_MAX and FLT_EPSILON too,
+ * and being shadowed it takes those with it. */
 #include <math.h>
+#include <float.h>
 
 #ifndef M_PI_F
 #define M_PI_F           3.1415927f
@@ -38,6 +41,15 @@
 #endif
 #ifndef M_LN2F
 #define M_LN2F           0.69813174f
+#endif
+#ifndef M_THREE_HALF_PI
+#define M_THREE_HALF_PI  (3 * M_HALF_PI)
+#endif
+
+/* The SDK compiler folded this constant slightly off exact 0.1f, and the game
+ * compares against it, so the value matters rather than just the name. */
+#ifndef IDO_POINT_ONE
+#define IDO_POINT_ONE    0.10000001f
 #endif
 
 /* Scale factors for converting normalised integers to float. The names say
