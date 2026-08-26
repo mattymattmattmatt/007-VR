@@ -253,9 +253,45 @@
 /**
  * Detects if arg or macro is defined as nothing.
  */
+#ifdef GEPC
+/* The paste below builds `_##x##_` so that an empty x yields the token
+ * _IS_EMPTY__ and anything else does not. That works for identifiers and for
+ * integers -- `_1` is a perfectly good identifier -- but not for a floating
+ * literal: `0.1` is a single preprocessing number, and `_0.1` is not a token
+ * at all, so there is no valid paste to perform. IDO shrugged and juxtaposed
+ * the tokens, which happens to give the right answer (the result does not
+ * match _IS_EMPTY__, so the argument reads as non-empty); GCC diagnoses it and
+ * stops. Every prop's scale in assets/obseg/prop goes through here, so it is
+ * not a corner case.
+ *
+ * The PC build swaps in the standard argument-counting test instead, which
+ * pastes only the digits 0 and 1 and so can never form an invalid token. Same
+ * contract: 1 when the argument expands to nothing, 0 otherwise. */
+#    define GEPC_ISE_ARG16(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11,   \
+                           _12, _13, _14, _15, ...)                            \
+         _15
+#    define GEPC_ISE_HAS_COMMA(...)                                            \
+         GEPC_ISE_ARG16(__VA_ARGS__, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0)
+#    define GEPC_ISE_TRIGGER(...) ,
+#    define GEPC_ISE_PASTE5(_0, _1, _2, _3, _4) _0##_1##_2##_3##_4
+#    define GEPC_ISE_CASE_0001 ,
+#    define GEPC_ISE_(_0, _1, _2, _3)                                          \
+         GEPC_ISE_HAS_COMMA(GEPC_ISE_PASTE5(GEPC_ISE_CASE_, _0, _1, _2, _3))
+
+/* The four probes distinguish "no tokens at all" from an argument that merely
+ * looks like one -- a lone macro name, a parenthesised group, or something
+ * callable. Only genuinely empty scores 0,0,0,1. */
+#    define IS_EMPTY(...)                                                      \
+         GEPC_ISE_(                                                            \
+             GEPC_ISE_HAS_COMMA(__VA_ARGS__),                                  \
+             GEPC_ISE_HAS_COMMA(GEPC_ISE_TRIGGER __VA_ARGS__),                 \
+             GEPC_ISE_HAS_COMMA(__VA_ARGS__ ()),                               \
+             GEPC_ISE_HAS_COMMA(GEPC_ISE_TRIGGER __VA_ARGS__ ()))
+#else
 #define IS_EMPTY(x)  _IS_EMPTY(x)
 #define _IS_EMPTY(x) IS_PROBE(CAT(_IS_EMPTY, _##x##_))
 #define _IS_EMPTY__  PROBE(~) /*NULL*/
+#endif
 
 /**
  * Detects if arg or macro is a Bool (1 or 0).

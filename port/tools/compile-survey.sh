@@ -36,9 +36,15 @@ trap 'rm -rf "$tmp"' EXIT
 # src/libultra/os, src/libultra/io and all of src/libultrare are the N64
 # hardware layers; port/src/libultra.c replaces them, so the PC build never
 # compiles them and counting them would misstate the remaining work.
+#
+# src/libultra/libc/string.c goes the same way. It defines strchr, strlen and
+# memcpy over `const unsigned char *`, which is what the N64's freestanding
+# libc wanted; on a hosted build those names are glibc's, with the same
+# behaviour and incompatible prototypes. The port takes glibc's.
 find src -name '*.c' \
     ! -path 'src/libultra/os/*' \
     ! -path 'src/libultra/io/*' \
+    ! -path 'src/libultra/libc/string.c' \
     ! -path 'src/libultrare/*' \
     | sort > "$tmp/files"
 total=$(wc -l < "$tmp/files")
