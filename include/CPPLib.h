@@ -402,7 +402,7 @@
  * _VA_ARGS_ for c89
  * Allows up to 32 Args on the stack
  */
-#define GEPC_EXPAND_ARGS_STACK_IMPL(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,AA,AB,AC,AD,AE,AF,ERROR) \
+#define EXPAND_ARGS_STACK(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,AA,AB,AC,AD,AE,AF,ERROR) \
 IF_VA(NOT(IS_EMPTY(A)))/*
 */(/*
 	*/A /*
@@ -505,41 +505,7 @@ IF_VA(NOT(IS_EMPTY(A)))/*
 																																*/)/*
 */)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)
 
-#ifdef GEPC
-/* Part of the AI-command DSL's C89 variadic emulation: the caller passes
- * however many arguments it has and IS_EMPTY drops the rest. IDO allowed both
- * too few and too many; C99 requires the declared count exactly. The body is
- * unchanged and renamed, and this entry point pads a short call out to the
- * declared arity while its variadic tail absorbs any surplus. */
-#define GEPC_EXPAND_ARGS_STACK_TAKE(                                          \
-    A, B, C, D, E, F, G, H, \
-    I, J, K, L, M, N, O, P, \
-    Q, R, S, T, U, V, W, X, \
-    Y, Z, AA, AB, AC, AD, AE, AF, \
-    ERROR, \
-    ...)                                                           \
-    GEPC_EXPAND_ARGS_STACK_IMPL(                                                        \
-    A, B, C, D, E, F, G, H, \
-    I, J, K, L, M, N, O, P, \
-    Q, R, S, T, U, V, W, X, \
-    Y, Z, AA, AB, AC, AD, AE, AF, \
-    ERROR)
 
-#define EXPAND_ARGS_STACK(...) GEPC_EXPAND_ARGS_STACK_TAKE(__VA_ARGS__,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,)
-#else
-/* Function-like, deliberately: several of these names appear as bare tokens
- * in the DSL, and an object-like alias would expand them there and change
- * what the ROM build sees. */
-#define EXPAND_ARGS_STACK(                                                        A, B, C, D, E, F, G, H, \
-    I, J, K, L, M, N, O, P, \
-    Q, R, S, T, U, V, W, X, \
-    Y, Z, AA, AB, AC, AD, AE, AF, \
-    ERROR)                                                         GEPC_EXPAND_ARGS_STACK_IMPL(                                                            A, B, C, D, E, F, G, H, \
-    I, J, K, L, M, N, O, P, \
-    Q, R, S, T, U, V, W, X, \
-    Y, Z, AA, AB, AC, AD, AE, AF, \
-    ERROR)
-#endif
 /**
  * Push/Pop VA Args arrays
  */

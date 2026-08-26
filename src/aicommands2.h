@@ -56,7 +56,6 @@
 #define AI_GotoNext_LENGTH   (AICMDSIZE +1    )
 
 
-
 # 169 "src/aicommands.def"
 //ALIAS FOR SYNTAX SUGER
 /*******************************************************************************
@@ -67,29 +66,8 @@
   @return    Continue execution from LABEL or End
   @exception Does Not search from beginning
 *******************************************************************************/
-#define GEPC_BREAK_IMPL(LABEL)  \
+#define BREAK(LABEL)  \
                 GotoNext(LABEL)
-
-#ifdef GEPC
-/* Part of the AI-command DSL's C89 variadic emulation: the caller passes
- * however many arguments it has and IS_EMPTY drops the rest. IDO allowed both
- * too few and too many; C99 requires the declared count exactly. The body is
- * unchanged and renamed, and this entry point pads a short call out to the
- * declared arity while its variadic tail absorbs any surplus. */
-#define GEPC_BREAK_TAKE(                                          \
-    LABEL, \
-    ...)                                                           \
-    GEPC_BREAK_IMPL(                                                        \
-    LABEL)
-
-#define BREAK(...) GEPC_BREAK_TAKE(__VA_ARGS__,)
-#else
-/* Function-like, deliberately: several of these names appear as bare tokens
- * in the DSL, and an object-like alias would expand them there and change
- * what the ROM build sees. */
-#define BREAK(                                                        LABEL)                                                         GEPC_BREAK_IMPL(                                                            LABEL)
-#endif
-
 
 
 # 175 "src/aicommands.def"
@@ -113,7 +91,6 @@
 #define AI_GotoFirst_LENGTH   (AICMDSIZE +1    )
 
 
-
 # 209 "src/aicommands.def"
 //ALIAS FOR SYNTAX SUGER
 /*******************************************************************************
@@ -127,7 +104,6 @@
                 GotoFirst(ID)
 
 
-
 # 226 "src/aicommands.def"
 /*******************************************************************************
   Exit LOOP early and go back to DO with ID
@@ -138,7 +114,6 @@
 *******************************************************************************/
 #define CONTINUE(ID)  \
                 GotoFirst(ID)
-
 
 
 # 241 "src/aicommands.def"
@@ -161,7 +136,6 @@
 #define AI_Label_LENGTH   (AICMDSIZE +1    )
 
 
-
 # 274 "src/aicommands.def"
 //ALIAS FOR SYNTAX SUGER
 /*******************************************************************************
@@ -175,7 +149,6 @@
                 Label(ID)                           Yield()
 
 
-
 /*******************************************************************************
   DO INFINITE LOOP with ID
 ********************************************************************************
@@ -185,7 +158,6 @@
 *******************************************************************************/
 #define YIELD_FOREVER(ID)  \
                 Label(ID)                   Yield()                   GotoFirst(ID)
-
 
 
 # 315 "src/aicommands.def"
@@ -207,7 +179,6 @@
 #define AI_Yield_LENGTH   (AICMDSIZE    )
 
 
-
 //==============================================================================
 //## END
 //==============================================================================
@@ -224,7 +195,6 @@
                     AI_EndList
 
 #define AI_EndList_LENGTH   (AICMDSIZE    )
-
 
 
 # 391 "src/aicommands.def"
@@ -249,7 +219,6 @@
 #define AI_SetChrAiList_LENGTH   (AICMDSIZE +1   +2    )
 
 
-
 //POLYMORPHS
 /******************************************************************************
   Jump my AI to AI_LIST_ID then return to Standard Guard
@@ -260,7 +229,6 @@
 ******************************************************************************/
 #define JUMPTO_THEN_GUARD(AI_LIST_ID)  \
                 SetReturnAiList(GAILIST_STANDARD_GUARD)SetChrAiList(CHR_SELF, (!isBGAIListID(AI_LIST_ID) ? AI_LIST_ID : AI_ERR_SUB))
-
 
 
 # 460 "src/aicommands.def"
@@ -275,7 +243,6 @@
                 SetReturnAiList(AI_LIST_ID)SetChrAiList(CHR_SELF, (!isBGAIListID(AI_LIST_ID) ? AI_LIST_ID : AI_ERR_SUB))
 
 
-
 # 475 "src/aicommands.def"
 /******************************************************************************
   Set my AI List program counter to beginning of a List and execute
@@ -286,7 +253,6 @@
 ******************************************************************************/
 #define JumpTo(AI_LIST_ID)  \
                 SetChrAiList(CHR_SELF, (!isBGAIListID(AI_LIST_ID) ? AI_LIST_ID : AI_ERR_SUB))
-
 
 
 # 490 "src/aicommands.def"
@@ -301,7 +267,6 @@
                 SetChrAiList(CHR_BOND_CINEMA, (!isBGAIListID(AI_LIST_ID) ? AI_LIST_ID : AI_ERR_NOTCHR))
 
 
-
 # 505 "src/aicommands.def"
 /******************************************************************************
   Call AI Subroutine with AI_LIST_ID and return (If subroutine allows)
@@ -311,9 +276,27 @@
   @exception: AI_LIST_ID Must NOT be a BG List (10XX)
               THIS must be defined for this function to be able to return
 ******************************************************************************/
-#define CALL(AI_LIST_ID)  \
-                                  IF_ELSE (  DEFINED (  THIS )                     )  (  AI_ERR_NO_THIS   )  (  (                    SetReturnAiList(THIS)SetChrAiList(CHR_SELF, (!isBGAIListID(AI_LIST_ID) && isSubroutine(AI_LIST_ID) ? AI_LIST_ID : AI_ERR_NOTSUB)) )  )  ,
-
+/* The trailing comma this ended with produced an empty element in the
+ * initialiser: SetChrAiList already supplies one, so CALL added a second and
+ * the pair reads as "a value is missing here". IDO skipped the empty element
+ * -- the only reading under which the AI script data comes out the right
+ * length -- and GCC rejects it outright.
+ *
+ * Confirmed to be the DSL's own doing rather than anything the port
+ * introduced: preprocessing this file with the *ROM* defines and compiling
+ * that result with GCC gives the identical "expected expression before ','".
+ *
+ * Only the normal branch needs the comma dropped; the other expands to
+ * AI_ERR_NO_THIS, which exists to stop the build anyway. Sharing the body
+ * keeps the ROM build's tokens exactly as they were, and CALL expands
+ * identically under both sets of defines. */
+#define GEPC_CALL_BODY(AI_LIST_ID) \
+                                  IF_ELSE (  DEFINED (  THIS )                     )  (  AI_ERR_NO_THIS   )  (  (                    SetReturnAiList(THIS)SetChrAiList(CHR_SELF, (!isBGAIListID(AI_LIST_ID) && isSubroutine(AI_LIST_ID) ? AI_LIST_ID : AI_ERR_NOTSUB)) )  )
+#ifdef GEPC
+#define CALL(AI_LIST_ID) GEPC_CALL_BODY(AI_LIST_ID)
+#else
+#define CALL(AI_LIST_ID) GEPC_CALL_BODY(AI_LIST_ID) ,
+#endif
 
 
 //==============================================================================
@@ -334,7 +317,6 @@
 #define AI_SetReturnAiList_LENGTH   (AICMDSIZE +2    )
 
 
-
 //==============================================================================
 //## JUMP TO RETURN AI LIST
 //==============================================================================
@@ -353,7 +335,6 @@
 #define AI_Return_LENGTH   (AICMDSIZE    )
 
 
-
 //==============================================================================
 //## GUARD ANIMATION STOP
 //==============================================================================
@@ -366,7 +347,6 @@
                     AI_Stop  ,
 
 #define AI_Stop_LENGTH   (AICMDSIZE    )
-
 
 
 # 651 "src/aicommands.def"
@@ -382,7 +362,6 @@
                     AI_Kneel  ,
 
 #define AI_Kneel_LENGTH   (AICMDSIZE    )
-
 
 
 # 683 "src/aicommands.def"
@@ -414,14 +393,12 @@
 #define AI_PlayAnimation_LENGTH   (AICMDSIZE +2   +2   +2   +1   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Play an animation
 *******************************************************************************/
 #define PlayAnimationSimple(ANIMATION_ID)  \
                 PlayAnimation(ANIMATION_ID, -1, -1,                     ANIM_UNKNOWN | ANIM_LOOP_HOLD_LAST_FRAME,                     ANIM_DEFAULT_INTERPOLATION)
-
 
 
 # 764 "src/aicommands.def"
@@ -442,7 +419,6 @@
 #define AI_IFPlayingAnimation_LENGTH   (AICMDSIZE +1    )
 
 
-
 //==============================================================================
 //## GUARD POINTS AT BOND
 //==============================================================================
@@ -461,7 +437,6 @@
 #define AI_PointAtBond_LENGTH   (AICMDSIZE    )
 
 
-
 # 839 "src/aicommands.def"
 //==============================================================================
 //## GUARD LOOKS AROUND SELF
@@ -475,7 +450,6 @@
                     AI_LookSurprised  ,
 
 #define AI_LookSurprised_LENGTH   (AICMDSIZE    )
-
 
 
 # 871 "src/aicommands.def"
@@ -497,7 +471,6 @@
 #define AI_TRYSidestepping_LENGTH   (AICMDSIZE +1    )
 
 
-
 //==============================================================================
 //## GUARD TRY HOPPING SIDEWAYS
 //==============================================================================
@@ -514,7 +487,6 @@
                     GOTOLABEL ,
 
 #define AI_TRYSideHopping_LENGTH   (AICMDSIZE +1    )
-
 
 
 //==============================================================================
@@ -535,7 +507,6 @@
 #define AI_TRYSideRunning_LENGTH   (AICMDSIZE +1    )
 
 
-
 //==============================================================================
 //## GUARD TRY FIRING WALK
 //==============================================================================
@@ -547,32 +518,12 @@
   @return     Continue execution from LABEL if successful
   @exception: Bond needs to be at long distance away from guard to work
 *******************************************************************************/
-#define GEPC_TRYFiringWalk_IMPL(GOTOLABEL)  \
+#define TRYFiringWalk(GOTOLABEL)  \
                     AI_TRYFiringWalk  ,  \
                     GOTOLABEL ,
 
-#ifdef GEPC
-/* Part of the AI-command DSL's C89 variadic emulation: the caller passes
- * however many arguments it has and IS_EMPTY drops the rest. IDO allowed both
- * too few and too many; C99 requires the declared count exactly. The body is
- * unchanged and renamed, and this entry point pads a short call out to the
- * declared arity while its variadic tail absorbs any surplus. */
-#define GEPC_TRYFiringWalk_TAKE(                                          \
-    GOTOLABEL, \
-    ...)                                                           \
-    GEPC_TRYFiringWalk_IMPL(                                                        \
-    GOTOLABEL)
-
-#define TRYFiringWalk(...) GEPC_TRYFiringWalk_TAKE(__VA_ARGS__,)
-#else
-/* Function-like, deliberately: several of these names appear as bare tokens
- * in the DSL, and an object-like alias would expand them there and change
- * what the ROM build sees. */
-#define TRYFiringWalk(                                                        GOTOLABEL)                                                         GEPC_TRYFiringWalk_IMPL(                                                            GOTOLABEL)
-#endif
 
 #define AI_TRYFiringWalk_LENGTH   (AICMDSIZE +1    )
-
 
 
 //==============================================================================
@@ -586,32 +537,12 @@
   @return     Continue execution from LABEL if successful
   @exception: Bond needs to be at long distance away from guard to work
 *******************************************************************************/
-#define GEPC_TRYFiringRun_IMPL(GOTOLABEL)  \
+#define TRYFiringRun(GOTOLABEL)  \
                     AI_TRYFiringRun  ,  \
                     GOTOLABEL ,
 
-#ifdef GEPC
-/* Part of the AI-command DSL's C89 variadic emulation: the caller passes
- * however many arguments it has and IS_EMPTY drops the rest. IDO allowed both
- * too few and too many; C99 requires the declared count exactly. The body is
- * unchanged and renamed, and this entry point pads a short call out to the
- * declared arity while its variadic tail absorbs any surplus. */
-#define GEPC_TRYFiringRun_TAKE(                                          \
-    GOTOLABEL, \
-    ...)                                                           \
-    GEPC_TRYFiringRun_IMPL(                                                        \
-    GOTOLABEL)
-
-#define TRYFiringRun(...) GEPC_TRYFiringRun_TAKE(__VA_ARGS__,)
-#else
-/* Function-like, deliberately: several of these names appear as bare tokens
- * in the DSL, and an object-like alias would expand them there and change
- * what the ROM build sees. */
-#define TRYFiringRun(                                                        GOTOLABEL)                                                         GEPC_TRYFiringRun_IMPL(                                                            GOTOLABEL)
-#endif
 
 #define AI_TRYFiringRun_LENGTH   (AICMDSIZE +1    )
-
 
 
 //==============================================================================
@@ -625,32 +556,12 @@
   @return     Continue execution from LABEL if successful
   @exception: Bond cannot be too close to guard or it will not work
 *******************************************************************************/
-#define GEPC_TRYFiringRoll_IMPL(GOTOLABEL)  \
+#define TRYFiringRoll(GOTOLABEL)  \
                     AI_TRYFiringRoll  ,  \
                     GOTOLABEL ,
 
-#ifdef GEPC
-/* Part of the AI-command DSL's C89 variadic emulation: the caller passes
- * however many arguments it has and IS_EMPTY drops the rest. IDO allowed both
- * too few and too many; C99 requires the declared count exactly. The body is
- * unchanged and renamed, and this entry point pads a short call out to the
- * declared arity while its variadic tail absorbs any surplus. */
-#define GEPC_TRYFiringRoll_TAKE(                                          \
-    GOTOLABEL, \
-    ...)                                                           \
-    GEPC_TRYFiringRoll_IMPL(                                                        \
-    GOTOLABEL)
-
-#define TRYFiringRoll(...) GEPC_TRYFiringRoll_TAKE(__VA_ARGS__,)
-#else
-/* Function-like, deliberately: several of these names appear as bare tokens
- * in the DSL, and an object-like alias would expand them there and change
- * what the ROM build sees. */
-#define TRYFiringRoll(                                                        GOTOLABEL)                                                         GEPC_TRYFiringRoll_IMPL(                                                            GOTOLABEL)
-#endif
 
 #define AI_TRYFiringRoll_LENGTH   (AICMDSIZE +1    )
-
 
 
 //==============================================================================
@@ -676,7 +587,6 @@
 #define AI_TRYFireOrAimAtTarget_LENGTH   (AICMDSIZE +2   +2   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Try making me aim/fire their weapon at ...
@@ -686,7 +596,6 @@
 *******************************************************************************/
 #define TRYFireAtPad(TARGET, GOTOLABEL)  \
                 TRYFireOrAimAtTarget(TARGET_PAD, TARGET, GOTOLABEL)
-
 
 
 # 1186 "src/aicommands.def"
@@ -700,7 +609,6 @@
                 TRYFireOrAimAtTarget(TARGET_PAD | TARGET_AIM_ONLY, TARGET, GOTOLABEL)
 
 
-
 # 1190 "src/aicommands.def"
 /*******************************************************************************
   Try making me aim/fire their weapon at ...
@@ -708,29 +616,8 @@
   @return     Continue execution from LABEL if successful
   @param      TARGET: 16bit ID
 *******************************************************************************/
-#define GEPC_TRYFireAtBond_IMPL(GOTOLABEL)  \
+#define TRYFireAtBond(GOTOLABEL)  \
                 TRYFireOrAimAtTarget(TARGET_BOND, 0, GOTOLABEL)
-
-#ifdef GEPC
-/* Part of the AI-command DSL's C89 variadic emulation: the caller passes
- * however many arguments it has and IS_EMPTY drops the rest. IDO allowed both
- * too few and too many; C99 requires the declared count exactly. The body is
- * unchanged and renamed, and this entry point pads a short call out to the
- * declared arity while its variadic tail absorbs any surplus. */
-#define GEPC_TRYFireAtBond_TAKE(                                          \
-    GOTOLABEL, \
-    ...)                                                           \
-    GEPC_TRYFireAtBond_IMPL(                                                        \
-    GOTOLABEL)
-
-#define TRYFireAtBond(...) GEPC_TRYFireAtBond_TAKE(__VA_ARGS__,)
-#else
-/* Function-like, deliberately: several of these names appear as bare tokens
- * in the DSL, and an object-like alias would expand them there and change
- * what the ROM build sees. */
-#define TRYFireAtBond(                                                        GOTOLABEL)                                                         GEPC_TRYFireAtBond_IMPL(                                                            GOTOLABEL)
-#endif
-
 
 
 # 1194 "src/aicommands.def"
@@ -742,7 +629,6 @@
 *******************************************************************************/
 #define TRYAimAtBond(GOTOLABEL)  \
                 TRYFireOrAimAtTarget(TARGET_BOND | TARGET_AIM_ONLY, 0, GOTOLABEL)
-
 
 
 # 1198 "src/aicommands.def"
@@ -768,7 +654,6 @@
 #define AI_TRYFireOrAimAtTargetKneel_LENGTH   (AICMDSIZE +2   +2   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Make me kneel and aim/fire at ...
@@ -778,7 +663,6 @@
 *******************************************************************************/
 #define TRYFireAtPadKneeling(TARGET, GOTOLABEL)  \
                 TRYFireOrAimAtTargetKneel(TARGET_PAD, TARGET, GOTOLABEL)
-
 
 
 # 1258 "src/aicommands.def"
@@ -792,7 +676,6 @@
                 TRYFireOrAimAtTargetKneel(TARGET_PAD | TARGET_AIM_ONLY, TARGET, GOTOLABEL)
 
 
-
 # 1262 "src/aicommands.def"
 /*******************************************************************************
   Make me kneel and aim/fire at ...
@@ -800,29 +683,8 @@
   @return     Continue execution from LABEL if successful
   @param      TARGET: 16bit ID
 *******************************************************************************/
-#define GEPC_TRYFireAtBondKneeling_IMPL(GOTOLABEL)  \
+#define TRYFireAtBondKneeling(GOTOLABEL)  \
                 TRYFireOrAimAtTargetKneel(TARGET_BOND, 0, GOTOLABEL)
-
-#ifdef GEPC
-/* Part of the AI-command DSL's C89 variadic emulation: the caller passes
- * however many arguments it has and IS_EMPTY drops the rest. IDO allowed both
- * too few and too many; C99 requires the declared count exactly. The body is
- * unchanged and renamed, and this entry point pads a short call out to the
- * declared arity while its variadic tail absorbs any surplus. */
-#define GEPC_TRYFireAtBondKneeling_TAKE(                                          \
-    GOTOLABEL, \
-    ...)                                                           \
-    GEPC_TRYFireAtBondKneeling_IMPL(                                                        \
-    GOTOLABEL)
-
-#define TRYFireAtBondKneeling(...) GEPC_TRYFireAtBondKneeling_TAKE(__VA_ARGS__,)
-#else
-/* Function-like, deliberately: several of these names appear as bare tokens
- * in the DSL, and an object-like alias would expand them there and change
- * what the ROM build sees. */
-#define TRYFireAtBondKneeling(                                                        GOTOLABEL)                                                         GEPC_TRYFireAtBondKneeling_IMPL(                                                            GOTOLABEL)
-#endif
-
 
 
 # 1266 "src/aicommands.def"
@@ -834,7 +696,6 @@
 *******************************************************************************/
 #define TRYAimAtBondKneeling(GOTOLABEL)  \
                 TRYFireOrAimAtTargetKneel(TARGET_BOND | TARGET_AIM_ONLY, 0, GOTOLABEL)
-
 
 
 # 1270 "src/aicommands.def"
@@ -861,7 +722,6 @@
 #define AI_TRYFireOrAimAtTargetUpdate_LENGTH   (AICMDSIZE +2   +2   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Try updating my TARGET
@@ -871,7 +731,6 @@
 *******************************************************************************/
 #define TRYFireAtPadUpdate(TARGET, GOTOLABEL)  \
                 TRYFireOrAimAtTargetUpdate(TARGET_PAD, TARGET, GOTOLABEL)
-
 
 
 # 1331 "src/aicommands.def"
@@ -885,7 +744,6 @@
                 TRYFireOrAimAtTargetUpdate(TARGET_PAD | TARGET_AIM_ONLY, TARGET, GOTOLABEL)
 
 
-
 # 1335 "src/aicommands.def"
 /*******************************************************************************
   Try updating my TARGET
@@ -897,7 +755,6 @@
                 TRYFireOrAimAtTargetUpdate(TARGET_BOND, 0, GOTOLABEL)
 
 
-
 # 1339 "src/aicommands.def"
 /*******************************************************************************
   Try updating my TARGET
@@ -907,7 +764,6 @@
 *******************************************************************************/
 #define TRYAimAtBondUpdate(GOTOLABEL)  \
                 TRYFireOrAimAtTargetUpdate(TARGET_BOND | TARGET_AIM_ONLY, 0, GOTOLABEL)
-
 
 
 # 1343 "src/aicommands.def"
@@ -936,7 +792,6 @@
 #define AI_TRYFacingTarget_LENGTH   (AICMDSIZE +2   +2   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Try making me continuously face TARGET
@@ -953,7 +808,6 @@
                 TRYFacingTarget(TARGET_PAD, TARGET, GOTOLABEL)
 
 
-
 # 1397 "src/aicommands.def"
 /*******************************************************************************
   Try making me continuously face TARGET
@@ -968,7 +822,6 @@
 *******************************************************************************/
 #define TRYFacingBond(GOTOLABEL)  \
                 TRYFacingTarget(TARGET_BOND, 0, GOTOLABEL)
-
 
 
 # 1401 "src/aicommands.def"
@@ -994,7 +847,6 @@
 #define AI_HitChrWithItem_LENGTH   (AICMDSIZE +1   +1   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Hit Chr body part with item damage, play reaction to hit location
@@ -1006,7 +858,6 @@
 *******************************************************************************/
 #define HitMeWithItem(PART_NUM, ITEM_NUM)  \
                 HitChrWithItem(CHR_SELF, PART_NUM, ITEM_NUM)
-
 
 
 # 1449 "src/aicommands.def"
@@ -1032,7 +883,6 @@
 #define AI_ChrHitChr_LENGTH   (AICMDSIZE +1   +1   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Chr hits Target chrs body part with held item, play reaction to hit location
@@ -1046,7 +896,6 @@
                 ChrHitChr(CHR_NUM, CHR_SELF, PART_NUM)
 
 
-
 # 1515 "src/aicommands.def"
 /*******************************************************************************
   Chr hits Target chrs body part with held item, play reaction to hit location
@@ -1058,7 +907,6 @@
 *******************************************************************************/
 #define IHitChr(CHR_NUM_TARGET, PART_NUM)  \
                 ChrHitChr(CHR_SELF, CHR_NUM_TARGET, PART_NUM)
-
 
 
 # 1519 "src/aicommands.def"
@@ -1084,7 +932,6 @@
 #define AI_TRYThrowingGrenade_LENGTH   (AICMDSIZE +1    )
 
 
-
 //==============================================================================
 //## GUARD TRY DROPPING ITEM
 //==============================================================================
@@ -1108,7 +955,6 @@
 #define AI_TRYDroppingItem_LENGTH   (AICMDSIZE +2   +1   +1    )
 
 
-
 //==============================================================================
 //## GUARD RUNS TO PAD
 //==============================================================================
@@ -1126,7 +972,6 @@
 #define AI_RunToPad_LENGTH   (AICMDSIZE +2    )
 
 
-
 //==============================================================================
 //## GUARD RUNS TO PAD PRESET
 //==============================================================================
@@ -1139,7 +984,6 @@
                     AI_RunToPadPreset  ,
 
 #define AI_RunToPadPreset_LENGTH   (AICMDSIZE    )
-
 
 
 # 1686 "src/aicommands.def"
@@ -1160,7 +1004,6 @@
 #define AI_WalkToPad_LENGTH   (AICMDSIZE +2    )
 
 
-
 //==============================================================================
 //## GUARD SPRINTS TO PAD
 //==============================================================================
@@ -1176,7 +1019,6 @@
                     CharArrayFrom16(PAD) ,
 
 #define AI_SprintToPad_LENGTH   (AICMDSIZE +2    )
-
 
 
 //==============================================================================
@@ -1197,7 +1039,6 @@
 #define AI_StartPatrol_LENGTH   (AICMDSIZE +1    )
 
 
-
 //==============================================================================
 //## GUARD SURRENDERS
 //==============================================================================
@@ -1212,7 +1053,6 @@
                     AI_Surrender  ,
 
 #define AI_Surrender_LENGTH   (AICMDSIZE    )
-
 
 
 # 1829 "src/aicommands.def"
@@ -1234,7 +1074,6 @@
 #define AI_RemoveMe_LENGTH   (AICMDSIZE    )
 
 
-
 # 1865 "src/aicommands.def"
 //==============================================================================
 //## CHR REMOVE INSTANT
@@ -1254,7 +1093,6 @@
 #define AI_ChrRemoveInstant_LENGTH   (AICMDSIZE +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Instantly remove me unlike RemoveMe
@@ -1263,7 +1101,6 @@
 *******************************************************************************/
 #define RemoveMeInstantly()  \
                 ChrRemoveInstant(CHR_SELF)
-
 
 
 # 1920 "src/aicommands.def"
@@ -1290,7 +1127,6 @@
 #define AI_TRYTriggeringAlarmAtPad_LENGTH   (AICMDSIZE +2   +1    )
 
 
-
 //==============================================================================
 //## ALARM ON
 //==============================================================================
@@ -1303,7 +1139,6 @@
                     AI_AlarmOn  ,
 
 #define AI_AlarmOn_LENGTH   (AICMDSIZE    )
-
 
 
 # 1997 "src/aicommands.def"
@@ -1319,7 +1154,6 @@
                     AI_AlarmOff  ,
 
 #define AI_AlarmOff_LENGTH   (AICMDSIZE    )
-
 
 
 # 2027 "src/aicommands.def"
@@ -1338,7 +1172,6 @@
                     GOTOLABEL ,
 
 #define AI_TRYRunFromBond_LENGTH   (AICMDSIZE +1    )
-
 
 
 //==============================================================================
@@ -1360,7 +1193,6 @@
 #define AI_TRYRunToBond_LENGTH   (AICMDSIZE +1    )
 
 
-
 //==============================================================================
 //## GUARD TRY WALKING TO BOND POSITION
 //==============================================================================
@@ -1378,7 +1210,6 @@
                     GOTOLABEL ,
 
 #define AI_TRYWalkToBond_LENGTH   (AICMDSIZE +1    )
-
 
 
 //==============================================================================
@@ -1400,7 +1231,6 @@
 #define AI_TRYSprintToBond_LENGTH   (AICMDSIZE +1    )
 
 
-
 //==============================================================================
 //## REMOVED COMMAND2B
 //==============================================================================
@@ -1416,7 +1246,6 @@
                     GOTOLABEL ,
 
 #define AI_TRYFindCover_LENGTH   (AICMDSIZE +1    )
-
 
 
 //==============================================================================
@@ -1440,7 +1269,6 @@
 #define AI_TRYRunToChr_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Try getting me to Run to CHR_NUM
@@ -1452,7 +1280,6 @@
 *******************************************************************************/
 #define TRYRunToPresetChr(GOTOLABEL)  \
                 TRYRunToChr(CHR_PRESET, GOTOLABEL)
-
 
 
 # 2285 "src/aicommands.def"
@@ -1477,7 +1304,6 @@
 #define AI_TRYWalkToChr_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Try getting me to walk to CHR_NUM
@@ -1489,7 +1315,6 @@
 *******************************************************************************/
 #define TRYWalkToPresetChr(GOTOLABEL)  \
                 TRYWalkToChr(CHR_PRESET, GOTOLABEL)
-
 
 
 # 2334 "src/aicommands.def"
@@ -1514,7 +1339,6 @@
 #define AI_TRYSprintToChr_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Try getting me to Sprint to CHR_NUM
@@ -1526,7 +1350,6 @@
 *******************************************************************************/
 #define TRYSprintToPresetChr(GOTOLABEL)  \
                 TRYSprintToChr(CHR_PRESET, GOTOLABEL)
-
 
 
 # 2383 "src/aicommands.def"
@@ -1549,7 +1372,6 @@
 #define AI_IFImOnPatrolOrStopped_LENGTH   (AICMDSIZE +1    )
 
 
-
 //==============================================================================
 //## IF CHR DYING OR DEAD
 //==============================================================================
@@ -1569,7 +1391,6 @@
 #define AI_IFChrDyingOrDead_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Is CHR_NUM dying or dead?
@@ -1579,7 +1400,6 @@
 *******************************************************************************/
 #define IFImDyingOrDead(GOTOLABEL)  \
                 IFChrDyingOrDead(CHR_SELF, GOTOLABEL)
-
 
 
 # 2475 "src/aicommands.def"
@@ -1604,7 +1424,6 @@
 #define AI_IFChrDoesNotExist_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Does CHR_NUM NOT exist? (died and faded/not spawned)
@@ -1618,7 +1437,6 @@
                 IFChrDoesNotExist(CHR_SELF, GOTOLABEL)
 
 
-
 # 2525 "src/aicommands.def"
 /*******************************************************************************
   Does CHR_NUM NOT exist? (died and faded/not spawned)
@@ -1630,7 +1448,6 @@
 *******************************************************************************/
 #define IFMyCloneDoesNotExist(GOTOLABEL)  \
                 IFChrDoesNotExist(CHR_CLONE, GOTOLABEL)
-
 
 
 # 2530 "src/aicommands.def"
@@ -1661,7 +1478,6 @@
 #define AI_IFISeeBond_LENGTH   (AICMDSIZE +1    )
 
 
-
 //==============================================================================
 //## RANDOM GENERATE SEED
 //==============================================================================
@@ -1676,7 +1492,6 @@
                     AI_SetNewRandom  ,
 
 #define AI_SetNewRandom_LENGTH   (AICMDSIZE    )
-
 
 
 # 2613 "src/aicommands.def"
@@ -1699,7 +1514,6 @@
 #define AI_IFRandomLessThan_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Is My/BG Random Less Than BYTE?
@@ -1709,7 +1523,6 @@
 *******************************************************************************/
 #define IFNewRandomLessThan(BYTE, GOTOLABEL)  \
                 SetNewRandom()IFRandomLessThan(BYTE, GOTOLABEL)
-
 
 
 # 2662 "src/aicommands.def"
@@ -1732,7 +1545,6 @@
 #define AI_IFRandomGreaterThan_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Is My/BG Random Greater Than BYTE?
@@ -1742,7 +1554,6 @@
 *******************************************************************************/
 #define IFNewRandomGreaterThan(BYTE, GOTOLABEL)  \
                 SetNewRandom()IFRandomGreaterThan(BYTE, GOTOLABEL)
-
 
 
 # 2711 "src/aicommands.def"
@@ -1765,7 +1576,6 @@
 #define AI_IFICanHearAlarm_LENGTH   (AICMDSIZE +1    )
 
 
-
 //==============================================================================
 //## IF ALARM IS ON
 //==============================================================================
@@ -1781,7 +1591,6 @@
                     GOTOLABEL ,
 
 #define AI_IFAlarmIsOn_LENGTH   (AICMDSIZE +1    )
-
 
 
 //==============================================================================
@@ -1800,7 +1609,6 @@
                     GOTOLABEL ,
 
 #define AI_IFGasIsLeaking_LENGTH   (AICMDSIZE +1    )
-
 
 
 //==============================================================================
@@ -1823,7 +1631,6 @@
 #define AI_IFIHeardBond_LENGTH   (AICMDSIZE +1    )
 
 
-
 //==============================================================================
 //## IF GUARD SEE ANOTHER GUARD SHOT
 //==============================================================================
@@ -1844,7 +1651,6 @@
 #define AI_IFISeeSomeoneShot_LENGTH   (AICMDSIZE +1    )
 
 
-
 //==============================================================================
 //## IF GUARD SEE ANOTHER GUARD DIE
 //==============================================================================
@@ -1862,7 +1668,6 @@
                     GOTOLABEL ,
 
 #define AI_IFISeeSomeoneDie_LENGTH   (AICMDSIZE +1    )
-
 
 
 //==============================================================================
@@ -1887,7 +1692,6 @@
 #define AI_IFICouldSeeBond_LENGTH   (AICMDSIZE +1    )
 
 
-
 //==============================================================================
 //## IF GUARD AND BOND WITHIN PARTIAL LINE OF SIGHT
 //==============================================================================
@@ -1905,7 +1709,6 @@
                     GOTOLABEL ,
 
 #define AI_IFICouldSeeBondsStan_LENGTH   (AICMDSIZE +1    )
-
 
 
 //==============================================================================
@@ -1932,7 +1735,6 @@
 #define AI_IFIWasShotRecently_LENGTH   (AICMDSIZE +1    )
 
 
-
 //==============================================================================
 //## IF GUARD HEARD BOND WITHIN LAST 10 SECS
 //==============================================================================
@@ -1951,7 +1753,6 @@
                     GOTOLABEL ,
 
 #define AI_IFIHeardBondRecently_LENGTH   (AICMDSIZE +1    )
-
 
 
 //==============================================================================
@@ -1973,7 +1774,6 @@
 #define AI_IFImInRoomWithChr_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 //==============================================================================
 //## IF GUARD HAS NOT BEEN SEEN
 //==============================================================================
@@ -1993,7 +1793,6 @@
 #define AI_IFIveNotBeenSeen_LENGTH   (AICMDSIZE +1    )
 
 
-
 //==============================================================================
 //## IF GUARD IS ON SCREEN
 //==============================================================================
@@ -2010,7 +1809,6 @@
                     GOTOLABEL ,
 
 #define AI_IFImOnScreen_LENGTH   (AICMDSIZE +1    )
-
 
 
 //==============================================================================
@@ -2033,7 +1831,6 @@
 #define AI_IFMyRoomIsOnScreen_LENGTH   (AICMDSIZE +1    )
 
 
-
 //==============================================================================
 //## IF ROOM CONTAINING PAD IS ON SCREEN
 //==============================================================================
@@ -2054,7 +1851,6 @@
 #define AI_IFRoomWithPadIsOnScreen_LENGTH   (AICMDSIZE +2   +1    )
 
 
-
 //==============================================================================
 //## IF GUARD IS TARGETED BY BOND
 //==============================================================================
@@ -2071,7 +1867,6 @@
                     GOTOLABEL ,
 
 #define AI_IFImTargetedByBond_LENGTH   (AICMDSIZE +1    )
-
 
 
 //==============================================================================
@@ -2092,7 +1887,6 @@
                     GOTOLABEL ,
 
 #define AI_IFBondMissedMe_LENGTH   (AICMDSIZE +1    )
-
 
 
 //==============================================================================
@@ -2117,7 +1911,6 @@
 #define AI_IFMyAngleToBondLessThan_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Is my counter-clockwise angle to Bond Less Than DEG?
@@ -2134,7 +1927,6 @@
                 IFMyAngleToBondLessThan(DEG2BYTE(DEG), GOTOLABEL)
 
 
-
 # 3519 "src/aicommands.def"
 /*******************************************************************************
   Is my counter-clockwise angle to Bond Less Than RAD?
@@ -2147,7 +1939,6 @@
 *******************************************************************************/
 #define IFMyAngleToBondLessThanRad(RAD, GOTOLABEL)  \
                 IFMyAngleToBondLessThan(RAD2BYTE(RAD), GOTOLABEL)
-
 
 
 # 3536 "src/aicommands.def"
@@ -2171,7 +1962,6 @@
 #define AI_IFMyAngleToBondGreaterThan_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Is my counter-clockwise angle to Bond Greater Than DEG?
@@ -2188,7 +1978,6 @@
                 IFMyAngleToBondGreaterThan(DEG2BYTE(DEG), GOTOLABEL)
 
 
-
 # 3599 "src/aicommands.def"
 /*******************************************************************************
   Is my counter-clockwise angle to Bond Greater Than RAD?
@@ -2201,7 +1990,6 @@
 *******************************************************************************/
 #define IFMyAngleToBondGreaterThanRad(RAD, GOTOLABEL)  \
                 IFMyAngleToBondGreaterThan(RAD2BYTE(RAD), GOTOLABEL)
-
 
 
 # 3616 "src/aicommands.def"
@@ -2225,7 +2013,6 @@
 #define AI_IFMyAngleFromBondLessThan_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Is my counter-clockwise angle from Bond Less Than DEG?
@@ -2242,7 +2029,6 @@
                 IFMyAngleFromBondLessThan(DEG2BYTE(DEG), GOTOLABEL)
 
 
-
 # 3677 "src/aicommands.def"
 /*******************************************************************************
   Is my counter-clockwise angle from Bond Less Than RAD?
@@ -2255,7 +2041,6 @@
 *******************************************************************************/
 #define IFMyAngleFromBondLessThanRad(ANGLE, GOTOLABEL)  \
                 IFMyAngleFromBondLessThan(RAD2BYTE(ANGLE), GOTOLABEL)
-
 
 
 # 3694 "src/aicommands.def"
@@ -2279,7 +2064,6 @@
 #define AI_IFMyAngleFromBondGreaterThan_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Is my counter-clockwise angle from Bond Greater Than DEG?
@@ -2296,7 +2080,6 @@
                 IFMyAngleFromBondGreaterThan(DEG2BYTE(DEG), GOTOLABEL)
 
 
-
 # 3755 "src/aicommands.def"
 /*******************************************************************************
   Is my counter-clockwise angle from Bond Greater Than RAD?
@@ -2309,7 +2092,6 @@
 *******************************************************************************/
 #define IFMyAngleFromBondGreaterThanRad(ANGLE, GOTOLABEL)  \
                 IFMyAngleFromBondGreaterThan(RAD2BYTE(ANGLE), GOTOLABEL)
-
 
 
 # 3772 "src/aicommands.def"
@@ -2332,7 +2114,6 @@
 #define AI_IFMyDistanceToBondLessThanDecimeter_LENGTH   (AICMDSIZE +2   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Is my distance to Bond Less Than DISTANCE?
@@ -2342,7 +2123,6 @@
 ********************************************************************************/
 #define IFMyDistanceToBondLessThanMeter(DISTANCE, GOTOLABEL)  \
                 IFMyDistanceToBondLessThanDecimeter((u16)(DISTANCE * 10), GOTOLABEL)
-
 
 
 # 3827 "src/aicommands.def"
@@ -2365,7 +2145,6 @@
 #define AI_IFMyDistanceToBondGreaterThanDecimeter_LENGTH   (AICMDSIZE +2   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Is My distance to Bond Greater Than DISTANCE?
@@ -2375,7 +2154,6 @@
 ********************************************************************************/
 #define IFMyDistanceToBondGreaterThanMeter(DISTANCE, GOTOLABEL)  \
                 IFMyDistanceToBondGreaterThanDecimeter((u16)(DISTANCE * 10), GOTOLABEL)
-
 
 
 # 3883 "src/aicommands.def"
@@ -2401,7 +2179,6 @@
 #define AI_IFChrDistanceToPadLessThanDecimeter_LENGTH   (AICMDSIZE +1   +2   +2   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Is My/Chr distance to PAD Less Than DISTANCE?
@@ -2412,7 +2189,6 @@
 *******************************************************************************/
 #define IFMyDistanceToPadLessThanDecimeter(DISTANCE, PAD, GOTOLABEL)  \
                 IFChrDistanceToPadLessThanDecimeter(CHR_SELF, (DISTANCE), PAD, GOTOLABEL)
-
 
 
 # 3934 "src/aicommands.def"
@@ -2427,7 +2203,6 @@
                 IFChrDistanceToPadLessThanDecimeter(CHR_NUM, (u16)(DISTANCE * 10), PAD, GOTOLABEL)
 
 
-
 # 3949 "src/aicommands.def"
 /*******************************************************************************
   Is My/Chr distance to PAD Less Than DISTANCE?
@@ -2438,7 +2213,6 @@
 *******************************************************************************/
 #define IFMyDistanceToPadLessThanMeter(DISTANCE, PAD, GOTOLABEL)  \
                 IFChrDistanceToPadLessThanDecimeter(CHR_SELF, (u16)(DISTANCE * 10), PAD, GOTOLABEL)
-
 
 
 # 3953 "src/aicommands.def"
@@ -2464,7 +2238,6 @@
 #define AI_IFChrDistanceToPadGreaterThanDecimeter_LENGTH   (AICMDSIZE +1   +2   +2   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Is My/Chr distance to PAD Greater Than DISTANCE?
@@ -2475,7 +2248,6 @@
 *******************************************************************************/
 #define IFMyDistanceToPadGreaterThanDecimeter(DISTANCE, PAD, GOTOLABEL)  \
                 IFChrDistanceToPadGreaterThanDecimeter(CHR_SELF, (DISTANCE), PAD, GOTOLABEL)
-
 
 
 # 4004 "src/aicommands.def"
@@ -2490,7 +2262,6 @@
                 IFChrDistanceToPadGreaterThanDecimeter(CHR_NUM, (u16)(DISTANCE * 10), PAD, GOTOLABEL)
 
 
-
 # 4018 "src/aicommands.def"
 /*******************************************************************************
   Is My/Chr distance to PAD Greater Than DISTANCE?
@@ -2501,7 +2272,6 @@
 ********************************************************************************/
 #define IFMyDistanceToPadGreaterThanMeter(DISTANCE, PAD, GOTOLABEL)  \
                 IFChrDistanceToPadGreaterThanDecimeter(CHR_SELF, (u16)(DISTANCE * 10), PAD, GOTOLABEL)
-
 
 
 # 4022 "src/aicommands.def"
@@ -2526,7 +2296,6 @@
 #define AI_IFMyDistanceToChrLessThanDecimeter_LENGTH   (AICMDSIZE +2   +1   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Is my distance to CHR_NUM Less Than DISTANCE?
@@ -2537,7 +2306,6 @@
 ********************************************************************************/
 #define IFMyDistanceToChrLessThanMeter(DISTANCE, CHR_NUM, GOTOLABEL)  \
                 IFMyDistanceToChrLessThanDecimeter((u16)(DISTANCE * 10), CHR_NUM, GOTOLABEL)
-
 
 
 # 4080 "src/aicommands.def"
@@ -2562,7 +2330,6 @@
 #define AI_IFMyDistanceToChrGreaterThanDecimeter_LENGTH   (AICMDSIZE +2   +1   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Is my distance to CHR_NUM Greater Than DISTANCE?
@@ -2573,7 +2340,6 @@
 *******************************************************************************/
 #define IFMyDistanceToChrGreaterThanMeters(DISTANCE, CHR_NUM, GOTOLABEL)  \
                 IFMyDistanceToChrGreaterThanDecimeter((u16)(DISTANCE * 10), CHR_NUM, GOTOLABEL)
-
 
 
 # 4138 "src/aicommands.def"
@@ -2598,7 +2364,6 @@
 #define AI_TRYSettingMyPresetToChrWithinDistanceDecimeter_LENGTH   (AICMDSIZE +2   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Try setting my padpreset to the pad of the first Chr found within DISTANCE
@@ -2610,7 +2375,6 @@
 *******************************************************************************/
 #define TRYSettingMyPresetToChrWithinDistanceMeters(DISTANCE,  GOTOLABEL)  \
                 TRYSettingMyPresetToChrWithinDistanceDecimeter((u16)(DISTANCE * 10), GOTOLABEL)
-
 
 
 # 4198 "src/aicommands.def"
@@ -2634,7 +2398,6 @@
 #define AI_IFBondDistanceToPadLessThanDecimeter_LENGTH   (AICMDSIZE +2   +2   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Is Bond within DISTANCE to PAD?
@@ -2644,7 +2407,6 @@
 ********************************************************************************/
 #define IFBondDistanceToPadLessThanMeter(DISTANCE, PAD, GOTOLABEL)  \
                 IFBondDistanceToPadLessThanDecimeter((u16)(DISTANCE * 10), PAD, GOTOLABEL)
-
 
 
 # 4255 "src/aicommands.def"
@@ -2668,7 +2430,6 @@
 #define AI_IFBondDistanceToPadGreaterThanDecimeter_LENGTH   (AICMDSIZE +2   +2   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Is Bond further than DISTANCE to PAD?
@@ -2678,7 +2439,6 @@
 ********************************************************************************/
 #define IFBondDistanceToPadGreaterThanMeter(DISTANCE, PAD, GOTOLABEL)  \
                 IFBondDistanceToPadGreaterThanDecimeter((u16)(DISTANCE * 10), PAD, GOTOLABEL)
-
 
 
 # 4312 "src/aicommands.def"
@@ -2702,7 +2462,6 @@
 #define AI_IFChrInRoomWithPad_LENGTH   (AICMDSIZE +1   +2   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Am I in room with PAD?
@@ -2711,7 +2470,6 @@
 ********************************************************************************/
 #define IFImInRoomWithPad(PAD, GOTOLABEL)  \
                 IFChrInRoomWithPad(CHR_SELF, PAD, GOTOLABEL)
-
 
 
 # 4367 "src/aicommands.def"
@@ -2733,7 +2491,6 @@
 #define AI_IFBondInRoomWithPad_LENGTH   (AICMDSIZE +2   +1    )
 
 
-
 //==============================================================================
 //## IF BOND COLLECTED OBJECT
 //==============================================================================
@@ -2750,7 +2507,6 @@
                     GOTOLABEL ,
 
 #define AI_IFBondCollectedObject_LENGTH   (AICMDSIZE +1   +1    )
-
 
 
 //==============================================================================
@@ -2773,7 +2529,6 @@
                     GOTOLABEL ,
 
 #define AI_IFKeyDropped_LENGTH   (AICMDSIZE +1   +1    )
-
 
 
 //==============================================================================
@@ -2799,7 +2554,6 @@
 #define AI_IFItemIsAttachedToObject_LENGTH   (AICMDSIZE +1   +1   +1    )
 
 
-
 //==============================================================================
 //## IF BOND HAS ITEM EQUIPPED
 //==============================================================================
@@ -2816,7 +2570,6 @@
                     GOTOLABEL ,
 
 #define AI_IFBondHasItemEquipped_LENGTH   (AICMDSIZE +1   +1    )
-
 
 
 //==============================================================================
@@ -2837,7 +2590,6 @@
 #define AI_IFObjectExists_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 //==============================================================================
 //## IF OBJECT NOT DESTROYED
 //==============================================================================
@@ -2854,7 +2606,6 @@
                     GOTOLABEL ,
 
 #define AI_IFObjectNotDestroyed_LENGTH   (AICMDSIZE +1   +1    )
-
 
 
 //==============================================================================
@@ -2876,7 +2627,6 @@
                     GOTOLABEL ,
 
 #define AI_IFObjectWasActivated_LENGTH   (AICMDSIZE +1   +1    )
-
 
 
 //==============================================================================
@@ -2903,7 +2653,6 @@
 #define AI_IFBondUsedGadgetOnObject_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 //==============================================================================
 //## OBJECT ACTIVATE
 //==============================================================================
@@ -2919,7 +2668,6 @@
                     OBJECT_TAG ,
 
 #define AI_ActivateObject_LENGTH   (AICMDSIZE +1    )
-
 
 
 //==============================================================================
@@ -2941,7 +2689,6 @@
 #define AI_DestroyObject_LENGTH   (AICMDSIZE +1    )
 
 
-
 //==============================================================================
 //## OBJECT DROP FROM CHR
 //==============================================================================
@@ -2959,7 +2706,6 @@
                     OBJECT_TAG ,
 
 #define AI_DropObject_LENGTH   (AICMDSIZE +1    )
-
 
 
 //==============================================================================
@@ -2983,7 +2729,6 @@
 #define AI_ChrDropAllConcealedItems_LENGTH   (AICMDSIZE +1    )
 
 
-
 //==============================================================================
 //## CHR DROP ALL HELD ITEMS
 //==============================================================================
@@ -3004,7 +2749,6 @@
 #define AI_ChrDropAllHeldItems_LENGTH   (AICMDSIZE +1    )
 
 
-
 //==============================================================================
 //## BOND COLLECT OBJECT
 //==============================================================================
@@ -3020,7 +2764,6 @@
                     OBJECT_TAG ,
 
 #define AI_BondCollectObject_LENGTH   (AICMDSIZE +1    )
-
 
 
 //==============================================================================
@@ -3046,7 +2789,6 @@
 #define AI_ChrEquipObject_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 //==============================================================================
 //## Move Object (Canonical Name)
 //==============================================================================
@@ -3068,7 +2810,6 @@
 #define AI_MoveObject_LENGTH   (AICMDSIZE +1   +2    )
 
 
-
 //==============================================================================
 //## DOOR OPEN
 //==============================================================================
@@ -3084,7 +2825,6 @@
 #define AI_DoorOpen_LENGTH   (AICMDSIZE +1    )
 
 
-
 //==============================================================================
 //## DOOR CLOSE
 //==============================================================================
@@ -3098,7 +2838,6 @@
                     OBJECT_TAG ,
 
 #define AI_DoorClose_LENGTH   (AICMDSIZE +1    )
-
 
 
 //==============================================================================
@@ -3122,7 +2861,6 @@
 #define AI_IFDoorStateEqual_LENGTH   (AICMDSIZE +1   +1   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   If tagged door state is ...
@@ -3131,7 +2869,6 @@
 *******************************************************************************/
 #define IFDoorClosed(GOTOLABEL)  \
                 IFDoorStateEqual(AI_DOOR_STATE_CLOSED, GOTOLABEL)
-
 
 
 # 5306 "src/aicommands.def"
@@ -3144,7 +2881,6 @@
                 IFDoorStateEqual(AI_DOOR_STATE_OPEN, GOTOLABEL)
 
 
-
 # 5310 "src/aicommands.def"
 /*******************************************************************************
   If tagged door state is ...
@@ -3153,7 +2889,6 @@
 *******************************************************************************/
 #define IFDoorClosing(GOTOLABEL)  \
                 IFDoorStateEqual(AI_DOOR_STATE_CLOSING, GOTOLABEL)
-
 
 
 # 5314 "src/aicommands.def"
@@ -3166,7 +2901,6 @@
                 IFDoorStateEqual(AI_DOOR_STATE_OPENING, GOTOLABEL)
 
 
-
 # 5318 "src/aicommands.def"
 /*******************************************************************************
   If tagged door state is ...
@@ -3175,7 +2909,6 @@
 *******************************************************************************/
 #define IFDoorOpenOrClosed(GOTOLABEL)  \
                 IFDoorStateEqual(IFAI_DOOR_STATE_OPEN | AI_DOOR_STATE_CLOSED, GOTOLABEL)
-
 
 
 # 5322 "src/aicommands.def"
@@ -3188,7 +2921,6 @@
                 IFDoorStateEqual(AI_DOOR_STATE_CLOSING | AI_DOOR_STATE_CLOSED, GOTOLABEL)
 
 
-
 # 5326 "src/aicommands.def"
 /*******************************************************************************
   If tagged door state is ...
@@ -3197,7 +2929,6 @@
 *******************************************************************************/
 #define IFDoorOpenOrClosing(GOTOLABEL)  \
                 IFDoorStateEqual(AI_DOOR_STATE_OPEN | AI_DOOR_STATE_CLOSING, GOTOLABEL)
-
 
 
 # 5330 "src/aicommands.def"
@@ -3210,7 +2941,6 @@
                 IFDoorStateEqual(AI_DOOR_STATE_OPEN | AI_DOOR_STATE_CLOSING | AI_DOOR_STATE_CLOSED, GOTOLABEL)
 
 
-
 # 5334 "src/aicommands.def"
 /*******************************************************************************
   If tagged door state is ...
@@ -3219,7 +2949,6 @@
 *******************************************************************************/
 #define IFDoorClosedOrOpening(GOTOLABEL)  \
                 IFDoorStateEqual(AI_DOOR_STATE_CLOSED | AI_DOOR_STATE_OPENING, GOTOLABEL)
-
 
 
 # 5338 "src/aicommands.def"
@@ -3232,7 +2961,6 @@
                 IFDoorStateEqual(AI_DOOR_STATE_OPEN | AI_DOOR_STATE_OPENING, GOTOLABEL)
 
 
-
 # 5342 "src/aicommands.def"
 /*******************************************************************************
   If tagged door state is ...
@@ -3241,7 +2969,6 @@
 *******************************************************************************/
 #define IFDoorNotClosing(GOTOLABEL)  \
                 IFDoorStateEqual(AI_DOOR_STATE_OPEN | AI_DOOR_STATE_OPENING | AI_DOOR_STATE_CLOSED, GOTOLABEL)
-
 
 
 # 5346 "src/aicommands.def"
@@ -3254,7 +2981,6 @@
                 IFDoorStateEqual(AI_DOOR_STATE_OPENING | AI_DOOR_STATE_CLOSED, GOTOLABEL)
 
 
-
 # 5350 "src/aicommands.def"
 /*******************************************************************************
   If tagged door state is ...
@@ -3265,7 +2991,6 @@
                 IFDoorStateEqual(AI_DOOR_STATE_OPENING | AI_DOOR_STATE_CLOSED | AI_DOOR_STATE_CLOSING, GOTOLABEL)
 
 
-
 # 5354 "src/aicommands.def"
 /*******************************************************************************
   If tagged door state is ...
@@ -3274,7 +2999,6 @@
 *******************************************************************************/
 #define IFDoorNotClosed(GOTOLABEL)  \
                 IFDoorStateEqual(AI_DOOR_STATE_OPEN | AI_DOOR_STATE_OPENING | AI_DOOR_STATE_CLOSING, GOTOLABEL)
-
 
 
 # 5358 "src/aicommands.def"
@@ -3298,7 +3022,6 @@
 #define AI_IFDoorHasBeenOpenedBefore_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 //==============================================================================
 //## DOOR SET LOCK
 //==============================================================================
@@ -3318,7 +3041,6 @@
 #define AI_DoorSetLock_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 //==============================================================================
 //## DOOR UNSET LOCK
 //==============================================================================
@@ -3336,7 +3058,6 @@
                     LOCK_FLAG ,
 
 #define AI_DoorUnsetLock_LENGTH   (AICMDSIZE +1   +1    )
-
 
 
 //==============================================================================
@@ -3360,7 +3081,6 @@
 #define AI_IFDoorLockEqual_LENGTH   (AICMDSIZE +1   +1   +1    )
 
 
-
 //==============================================================================
 //## IF OBJECTIVE NUM COMPLETE
 //==============================================================================
@@ -3381,7 +3101,6 @@
                     GOTOLABEL ,
 
 #define AI_IFObjectiveNumComplete_LENGTH   (AICMDSIZE +1   +1    )
-
 
 
 //==============================================================================
@@ -3409,7 +3128,6 @@
 #define AI_TRYUnknown6e_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 //==============================================================================
 //## GUARD TRY UNKNOWN6F
 //==============================================================================
@@ -3435,7 +3153,6 @@
 #define AI_TRYUnknown6f_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 //==============================================================================
 //## IF GAME DIFFICULTY LESS THAN
 //==============================================================================
@@ -3456,7 +3173,6 @@
                     GOTOLABEL ,
 
 #define AI_IFGameDifficultyLessThan_LENGTH   (AICMDSIZE +1   +1    )
-
 
 
 //==============================================================================
@@ -3481,7 +3197,6 @@
 #define AI_IFGameDifficultyGreaterThan_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 //==============================================================================
 //## IF MISSION TIME LESS THAN
 //==============================================================================
@@ -3499,7 +3214,6 @@
                     GOTOLABEL ,
 
 #define AI_IFMissionTimeLessThan_LENGTH   (AICMDSIZE +2   +1    )
-
 
 
 //==============================================================================
@@ -3521,7 +3235,6 @@
 #define AI_IFMissionTimeGreaterThan_LENGTH   (AICMDSIZE +2   +1    )
 
 
-
 //==============================================================================
 //## IF SYSTEM POWER TIME LESS THAN
 //==============================================================================
@@ -3539,7 +3252,6 @@ r*******************************************************************************
                     GOTOLABEL ,
 
 #define AI_IFSystemPowerTimeLessThan_LENGTH   (AICMDSIZE +2   +1    )
-
 
 
 //==============================================================================
@@ -3561,7 +3273,6 @@ r*******************************************************************************
 #define AI_IFSystemPowerTimeGreaterThan_LENGTH   (AICMDSIZE +2   +1    )
 
 
-
 //==============================================================================
 //## IF LEVEL ID LESS THAN
 //==============================================================================
@@ -3581,7 +3292,6 @@ r*******************************************************************************
 #define AI_IFLevelIdLessThan_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 //==============================================================================
 //## IF LEVEL ID GREATER THAN
 //==============================================================================
@@ -3599,7 +3309,6 @@ r*******************************************************************************
                     GOTOLABEL ,
 
 #define AI_IFLevelIdGreaterThan_LENGTH   (AICMDSIZE +1   +1    )
-
 
 
 //==============================================================================
@@ -3622,7 +3331,6 @@ r*******************************************************************************
 #define AI_IFMyNumArghsLessThan_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 //==============================================================================
 //## IF GUARD HITS GREATER THAN
 //==============================================================================
@@ -3641,7 +3349,6 @@ r*******************************************************************************
                     GOTOLABEL ,
 
 #define AI_IFMyNumArghsGreaterThan_LENGTH   (AICMDSIZE +1   +1    )
-
 
 
 //==============================================================================
@@ -3663,7 +3370,6 @@ r*******************************************************************************
 #define AI_IFMyNumCloseArghsLessThan_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 //==============================================================================
 //## IF GUARD HITS MISSED GREATER THAN
 //==============================================================================
@@ -3681,7 +3387,6 @@ r*******************************************************************************
                     GOTOLABEL ,
 
 #define AI_IFMyNumCloseArghsGreaterThan_LENGTH   (AICMDSIZE +1   +1    )
-
 
 
 //==============================================================================
@@ -3708,7 +3413,6 @@ r*******************************************************************************
 #define AI_IFChrHealthLessThan_LENGTH   (AICMDSIZE +1   +1   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   If My/chrs health < HEALTH
@@ -3722,7 +3426,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define IFChrHealthLessThanF(CHR_NUM,HEALTH,GOTOLABEL)  \
                 IFChrHealthLessThan(CHR_NUM,(u8)(HEALTH*10), GOTOLABEL)
-
 
 
 # 6217 "src/aicommands.def"
@@ -3740,7 +3443,6 @@ r*******************************************************************************
                 IFChrHealthLessThan(CHR_SELF,HEALTH, GOTOLABEL)
 
 
-
 # 6221 "src/aicommands.def"
 /*******************************************************************************
   If My/chrs health < HEALTH
@@ -3754,7 +3456,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define IFMyHealthLessThanF(HEALTH,GOTOLABEL)  \
                 IFChrHealthLessThan(CHR_SELF, (u8)(HEALTH*10), GOTOLABEL)
-
 
 
 # 6225 "src/aicommands.def"
@@ -3782,7 +3483,6 @@ r*******************************************************************************
 #define AI_IFChrHealthGreaterThan_LENGTH   (AICMDSIZE +1   +1   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   If My/chrs health > HEALTH
@@ -3796,7 +3496,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define IFChrHealthGreaterThanF(CHR_NUM,HEALTH,GOTOLABEL)  \
                 IFChrHealthGreaterThan(CHR_NUM,(u8)(HEALTH*10), GOTOLABEL)
-
 
 
 # 6277 "src/aicommands.def"
@@ -3814,7 +3513,6 @@ r*******************************************************************************
                 IFChrHealthGreaterThan(CHR_SELF,HEALTH, GOTOLABEL)
 
 
-
 # 6281 "src/aicommands.def"
 /*******************************************************************************
   If My/chrs health > HEALTH
@@ -3828,7 +3526,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define IFMyHealthGreaterThanF(HEALTH,GOTOLABEL)  \
                 IFChrHealthGreaterThan(CHR_SELF, (u8)(HEALTH*10), GOTOLABEL)
-
 
 
 # 6285 "src/aicommands.def"
@@ -3854,7 +3551,6 @@ r*******************************************************************************
 #define AI_IFChrWasDamagedSinceLastCheck_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   If chr has taken damage since last check
@@ -3867,7 +3563,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define IFIWasDamagedSinceLastCheck(GOTOLABEL)  \
                 IFChrWasDamagedSinceLastCheck(CHR_SELF, GOTOLABEL)
-
 
 
 # 6337 "src/aicommands.def"
@@ -3891,7 +3586,6 @@ r*******************************************************************************
 #define AI_IFBondHealthLessThan_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 //==============================================================================
 //## IF BOND HEALTH GREATER THAN
 //==============================================================================
@@ -3912,7 +3606,6 @@ r*******************************************************************************
 #define AI_IFBondHealthGreaterThan_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 //==============================================================================
 //## LOCAL BYTE 1 SET
 //==============================================================================
@@ -3928,7 +3621,6 @@ r*******************************************************************************
                     CHRBYTE ,
 
 #define AI_SetMyMorale_LENGTH   (AICMDSIZE +1    )
-
 
 
 # 6454 "src/aicommands.def"
@@ -3950,7 +3642,6 @@ r*******************************************************************************
 #define AI_AddToMyMorale_LENGTH   (AICMDSIZE +1    )
 
 
-
 //==============================================================================
 //## LOCAL BYTE 1 SUBTRACT
 //==============================================================================
@@ -3967,7 +3658,6 @@ r*******************************************************************************
                     CHRBYTE ,
 
 #define AI_SubtractFromMyMorale_LENGTH   (AICMDSIZE +1    )
-
 
 
 //==============================================================================
@@ -3988,7 +3678,6 @@ r*******************************************************************************
 #define AI_IFMyMoraleLessThan_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 //==============================================================================
 //## IF LOCAL BYTE 1 LESS THAN RANDOM SEED
 //==============================================================================
@@ -4006,7 +3695,6 @@ r*******************************************************************************
 #define AI_IFMyMoraleLessThanRandom_LENGTH   (AICMDSIZE +1    )
 
 
-
 //==============================================================================
 //## LOCAL BYTE 2 SET
 //==============================================================================
@@ -4022,7 +3710,6 @@ r*******************************************************************************
                     CHRBYTE ,
 
 #define AI_SetMyAlertness_LENGTH   (AICMDSIZE +1    )
-
 
 
 # 6647 "src/aicommands.def"
@@ -4044,7 +3731,6 @@ r*******************************************************************************
 #define AI_AddToMyAlertness_LENGTH   (AICMDSIZE +1    )
 
 
-
 //==============================================================================
 //## LOCAL BYTE 2 SUBTRACT
 //==============================================================================
@@ -4061,7 +3747,6 @@ r*******************************************************************************
                     CHRBYTE ,
 
 #define AI_SubtractFromMyAlertness_LENGTH   (AICMDSIZE +1    )
-
 
 
 //==============================================================================
@@ -4082,7 +3767,6 @@ r*******************************************************************************
 #define AI_IFMyAlertnessLessThan_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 //==============================================================================
 //## IF LOCAL BYTE 2 LESS THAN RANDOM SEED
 //==============================================================================
@@ -4098,7 +3782,6 @@ r*******************************************************************************
                     GOTOLABEL ,
 
 #define AI_IFMyAlertnessLessThanRandom_LENGTH   (AICMDSIZE +1    )
-
 
 
 //==============================================================================
@@ -4121,7 +3804,6 @@ r*******************************************************************************
 #define AI_SetMyHearingScale_LENGTH   (AICMDSIZE +2    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Set My hearing scale - the higher the value, the further away I
@@ -4133,7 +3815,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define SetMyHearingScaleF(HEARING_SCALE)  \
                 SetMyHearingScale((u16)(HEARING_SCALE * 1000))
-
 
 
 # 6851 "src/aicommands.def"
@@ -4157,7 +3838,6 @@ r*******************************************************************************
 #define AI_SetMyVisionRange_LENGTH   (AICMDSIZE +1    )
 
 
-
 # 6887 "src/aicommands.def"
 //==============================================================================
 //## GUARD SET GRENADE PROBABILITY
@@ -4179,7 +3859,6 @@ r*******************************************************************************
 #define AI_SetMyGrenadeProbability_LENGTH   (AICMDSIZE +1    )
 
 
-
 # 6923 "src/aicommands.def"
 //==============================================================================
 //## GUARD SET CHR NUM
@@ -4196,7 +3875,6 @@ r*******************************************************************************
                     CHR_NUM ,
 
 #define AI_SetMyChrNum_LENGTH   (AICMDSIZE +1    )
-
 
 
 # 6956 "src/aicommands.def"
@@ -4222,7 +3900,6 @@ r*******************************************************************************
 #define AI_SetMyHealthTotal_LENGTH   (AICMDSIZE +2    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Set My total HEALTH - the higher the value, the more shots needed
@@ -4236,7 +3913,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define SetMyHealthTotalF(HEALTH)  \
                 SetMyHealthTotal((u16)(HEALTH*10))
-
 
 
 # 7002 "src/aicommands.def"
@@ -4266,7 +3942,6 @@ r*******************************************************************************
 #define AI_SetMyArmour_LENGTH   (AICMDSIZE +2    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Set My armour value - the higher the value, the higher the armour.
@@ -4286,7 +3961,6 @@ r*******************************************************************************
                 SetMyArmour((u16)(AMOUNT*10))
 
 
-
 # 7051 "src/aicommands.def"
 /*******************************************************************************
   Remove All damage from me
@@ -4296,7 +3970,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define RemoveMyDamage(LOOPLABEL, DONELABEL)                    \
                      DO(LOOPLABEL)         IFMyHealthGreaterThanF(3.5,DONELABEL)SetMyArmour(5)     LOOP(LOOPLABEL)
-
 
 
 # 7067 "src/aicommands.def"
@@ -4322,7 +3995,6 @@ r*******************************************************************************
 #define AI_SetMySpeedRating_LENGTH   (AICMDSIZE +1    )
 
 
-
 //==============================================================================
 //## GUARD SET ARGH RATING
 //==============================================================================
@@ -4346,7 +4018,6 @@ r*******************************************************************************
 #define AI_SetMyArghRating_LENGTH   (AICMDSIZE +1    )
 
 
-
 //==============================================================================
 //## GUARD SET ACCURACY RATING
 //==============================================================================
@@ -4364,7 +4035,6 @@ r*******************************************************************************
                     ACCURACY_RATING ,
 
 #define AI_SetMyAccuracyRating_LENGTH   (AICMDSIZE +1    )
-
 
 
 //==============================================================================
@@ -4388,7 +4058,6 @@ r*******************************************************************************
 #define AI_SetMyFlags2_LENGTH   (AICMDSIZE +1    )
 
 
-
 # 7227 "src/aicommands.def"
 //POLYMORPHS
 /*******************************************************************************
@@ -4402,7 +4071,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define SetBGFlags2(BITS)  \
                 SetMyFlags2(BITS)
-
 
 
 # 7234 "src/aicommands.def"
@@ -4427,7 +4095,6 @@ r*******************************************************************************
 #define AI_UnsetMyFlags2_LENGTH   (AICMDSIZE +1    )
 
 
-
 # 7272 "src/aicommands.def"
 //POLYMORPHS
 /*******************************************************************************
@@ -4441,7 +4108,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define UnsetBGFlags2(BITS)  \
                 UnsetMyFlags2(BITS)
-
 
 
 # 7279 "src/aicommands.def"
@@ -4468,7 +4134,6 @@ r*******************************************************************************
 #define AI_IFMyFlags2Has_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   If flags2 has BITS enabled
@@ -4482,7 +4147,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define IFBGFlags2Has(BITS)  \
                 IFMyFlags2Has(BITS)
-
 
 
 # 7330 "src/aicommands.def"
@@ -4509,7 +4173,6 @@ r*******************************************************************************
 #define AI_SetChrBitfield_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 # 7368 "src/aicommands.def"
 //==============================================================================
 //## CHR FLAGS2 SET OFF
@@ -4532,7 +4195,6 @@ r*******************************************************************************
                     BITS ,
 
 #define AI_UnsetChrBitfield_LENGTH   (AICMDSIZE +1   +1    )
-
 
 
 # 7406 "src/aicommands.def"
@@ -4561,7 +4223,6 @@ r*******************************************************************************
 #define AI_IFChrBitfieldHas_LENGTH   (AICMDSIZE +1   +1   +1    )
 
 
-
 //==============================================================================
 //## OBJECTIVE BITFIELD SET ON
 //==============================================================================
@@ -4584,7 +4245,6 @@ r*******************************************************************************
                     CharArrayFrom32(BITFIELD) ,
 
 #define AI_SetObjectiveBitfield_LENGTH   (AICMDSIZE +4    )
-
 
 
 //==============================================================================
@@ -4611,7 +4271,6 @@ r*******************************************************************************
 #define AI_UnsetObjectiveBitfield_LENGTH   (AICMDSIZE +4    )
 
 
-
 //==============================================================================
 //## IF OBJECTIVE BITFIELD IS SET ON
 //==============================================================================
@@ -4628,7 +4287,6 @@ r*******************************************************************************
                     GOTOLABEL ,
 
 #define AI_IFObjectiveBitfieldHas_LENGTH   (AICMDSIZE +4   +1    )
-
 
 
 //==============================================================================
@@ -4652,7 +4310,6 @@ r*******************************************************************************
 #define AI_SetMychrflags_LENGTH   (AICMDSIZE +4    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Set My/BG chrflags
@@ -4665,7 +4322,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define SetBGchrflags(CHRFLAGS)  \
                 SetMychrflags(CHRFLAGS)
-
 
 
 # 7618 "src/aicommands.def"
@@ -4690,7 +4346,6 @@ r*******************************************************************************
 #define AI_UnsetMychrflags_LENGTH   (AICMDSIZE +4    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Set My/BG chrflags
@@ -4703,7 +4358,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define UnsetBGchrflags(CHRFLAGS)  \
                 UnsetMychrflags(CHRFLAGS)
-
 
 
 # 7662 "src/aicommands.def"
@@ -4730,7 +4384,6 @@ r*******************************************************************************
 #define AI_IFMychrflagsHas_LENGTH   (AICMDSIZE +4   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   If My/BG chrflags has CHRFLAGS set
@@ -4744,7 +4397,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define IFBGchrflagsHas(CHRFLAGS)  \
                 IFMychrflagsHas(CHRFLAGS)
-
 
 
 # 7714 "src/aicommands.def"
@@ -4768,7 +4420,6 @@ r*******************************************************************************
 #define AI_SetChrchrflags_LENGTH   (AICMDSIZE +1   +4    )
 
 
-
 //==============================================================================
 //## CHR FLAGS SET OFF
 //==============================================================================
@@ -4787,7 +4438,6 @@ r*******************************************************************************
                     CharArrayFrom32(CHRFLAGS) ,
 
 #define AI_UnsetChrchrflags_LENGTH   (AICMDSIZE +1   +4    )
-
 
 
 //==============================================================================
@@ -4812,7 +4462,6 @@ r*******************************************************************************
 #define AI_IFChrchrflagsHas_LENGTH   (AICMDSIZE +1   +4   +1    )
 
 
-
 //==============================================================================
 //## OBJECT FLAGS 1 SET ON
 //==============================================================================
@@ -4831,7 +4480,6 @@ r*******************************************************************************
 #define AI_SetObjectFlags_LENGTH   (AICMDSIZE +1   +4    )
 
 
-
 //==============================================================================
 //## OBJECT FLAGS 1 SET OFF
 //==============================================================================
@@ -4848,7 +4496,6 @@ r*******************************************************************************
                     CharArrayFrom32(BITFIELD) ,
 
 #define AI_UnsetObjectFlags_LENGTH   (AICMDSIZE +1   +4    )
-
 
 
 //==============================================================================
@@ -4871,7 +4518,6 @@ r*******************************************************************************
 #define AI_IFObjectFlagsHas_LENGTH   (AICMDSIZE +1   +4   +1    )
 
 
-
 //==============================================================================
 //## OBJECT FLAGS 2 SET ON
 //==============================================================================
@@ -4890,7 +4536,6 @@ r*******************************************************************************
 #define AI_SetObjectFlags2_LENGTH   (AICMDSIZE +1   +4    )
 
 
-
 //==============================================================================
 //## OBJECT FLAGS 2 SET OFF
 //==============================================================================
@@ -4907,7 +4552,6 @@ r*******************************************************************************
                     CharArrayFrom32(BITS) ,
 
 #define AI_UnsetObjectFlags2_LENGTH   (AICMDSIZE +1   +4    )
-
 
 
 //==============================================================================
@@ -4930,7 +4574,6 @@ r*******************************************************************************
 #define AI_IFObjectFlags2Has_LENGTH   (AICMDSIZE +1   +4   +1    )
 
 
-
 //==============================================================================
 //## GUARD SET CHR PRESET
 //==============================================================================
@@ -4946,7 +4589,6 @@ r*******************************************************************************
 #define AI_SetMyChrPreset_LENGTH   (AICMDSIZE +1    )
 
 
-
 # 8105 "src/aicommands.def"
 //POLYMORPHS
 /*******************************************************************************
@@ -4954,7 +4596,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define SetBGChrPreset(CHRFLAGS)  \
                 SetMyChrPreset(CHRFLAGS)
-
 
 
 # 8112 "src/aicommands.def"
@@ -4974,7 +4615,6 @@ r*******************************************************************************
 #define AI_SetChrChrPreset_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 # 8143 "src/aicommands.def"
 //==============================================================================
 //## GUARD SET PAD PRESET
@@ -4991,14 +4631,12 @@ r*******************************************************************************
 #define AI_SetMyPadPreset_LENGTH   (AICMDSIZE +2    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Set My/BG Preset Pad to PAD_PRESET
 *******************************************************************************/
 #define SetBGPadPreset(CHRFLAGS)  \
                 SetMyPadPreset(CHRFLAGS)
-
 
 
 # 8189 "src/aicommands.def"
@@ -5018,7 +4656,6 @@ r*******************************************************************************
 #define AI_SetChrPadPreset_LENGTH   (AICMDSIZE +1   +2    )
 
 
-
 # 8221 "src/aicommands.def"
 //==============================================================================
 //## Print (Canonical name)
@@ -5032,7 +4669,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define PRINT(STRING)  \
             AI_PRINT  ,
-
 
 
 //==============================================================================
@@ -5052,7 +4688,6 @@ r*******************************************************************************
 #define AI_MyTimerStart_LENGTH   (AICMDSIZE    )
 
 
-
 # 8286 "src/aicommands.def"
 //POLYMORPHS
 /*******************************************************************************
@@ -5063,7 +4698,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define BGTimerResetStart()  \
                 MyTimerStart()
-
 
 
 # 8293 "src/aicommands.def"
@@ -5084,7 +4718,6 @@ r*******************************************************************************
 #define AI_MyTimerReset_LENGTH   (AICMDSIZE    )
 
 
-
 # 8326 "src/aicommands.def"
 //POLYMORPHS
 /*******************************************************************************
@@ -5095,7 +4728,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define BGTimerReset()  \
                 MyTimerReset()
-
 
 
 # 8333 "src/aicommands.def"
@@ -5116,7 +4748,6 @@ r*******************************************************************************
 #define AI_MyTimerPause_LENGTH   (AICMDSIZE    )
 
 
-
 # 8366 "src/aicommands.def"
 //POLYMORPHS
 /*******************************************************************************
@@ -5127,7 +4758,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define BGTimerPause()  \
                 MyTimerPause()
-
 
 
 # 8373 "src/aicommands.def"
@@ -5148,7 +4778,6 @@ r*******************************************************************************
 #define AI_MyTimerResume_LENGTH   (AICMDSIZE    )
 
 
-
 # 8406 "src/aicommands.def"
 //POLYMORPHS
 /*******************************************************************************
@@ -5159,7 +4788,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define BGTimerResume()  \
                 MyTimerResume()
-
 
 
 # 8413 "src/aicommands.def"
@@ -5181,7 +4809,6 @@ r*******************************************************************************
 #define AI_IFMyTimerIsNotRunning_LENGTH   (AICMDSIZE +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   If My/BG timer is NOT running (paused)
@@ -5191,7 +4818,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define IFBGTimerIsNotRunning(GOTOLABEL)  \
                 IFMyTimerIsNotRunning(GOTOLABEL)
-
 
 
 # 8460 "src/aicommands.def"
@@ -5215,7 +4841,6 @@ r*******************************************************************************
 #define AI_IFMyTimerLessThanTicks_LENGTH   (AICMDSIZE +3   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   If My/BG Timer is Less Than TICKS
@@ -5226,7 +4851,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define IFBGTimerLessThanTicks(TICKS,GOTOLABEL)  \
                 IFMyTimerLessThanTicks(TICKS,GOTOLABEL)
-
 
 
 # 8509 "src/aicommands.def"
@@ -5240,7 +4864,6 @@ r*******************************************************************************
                 IFMyTimerLessThanTicks((SECS_TO_TIMER60(SECONDS)), GOTOLABEL)
 
 
-
 # 8522 "src/aicommands.def"
 /*******************************************************************************
   If My/BG Timer is Less Than SECONDS
@@ -5250,7 +4873,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define IFBGTimerLessThanSeconds(SECONDS, GOTOLABEL)  \
                 IFMyTimerLessThanTicks((SECS_TO_TIMER60(SECONDS)), GOTOLABEL)
-
 
 
 # 8526 "src/aicommands.def"
@@ -5274,7 +4896,6 @@ r*******************************************************************************
 #define AI_IFMyTimerGreaterThanTicks_LENGTH   (AICMDSIZE +3   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   If My/BG Timer is Greater Than TICKS
@@ -5285,7 +4906,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define IFBGTimerGreaterThanTicks(TICKS,GOTOLABEL)  \
                 IFMyTimerGreaterThanTicks(TICKS,GOTOLABEL)
-
 
 
 # 8576 "src/aicommands.def"
@@ -5299,7 +4919,6 @@ r*******************************************************************************
                 IFMyTimerGreaterThanTicks((SECS_TO_TIMER60(SECONDS)), GOTOLABEL)
 
 
-
 # 8589 "src/aicommands.def"
 /*******************************************************************************
   If My/BG Timer is Less Than SECONDS
@@ -5309,7 +4928,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define IFBGTimerGreaterThanSeconds(SECONDS, GOTOLABEL)  \
                 IFMyTimerGreaterThanTicks((SECS_TO_TIMER60(SECONDS)), GOTOLABEL)
-
 
 
 # 8593 "src/aicommands.def"
@@ -5327,7 +4945,6 @@ r*******************************************************************************
 #define AI_HudCountdownShow_LENGTH   (AICMDSIZE    )
 
 
-
 # 8622 "src/aicommands.def"
 //==============================================================================
 //## HUD COUNTDOWN HIDE
@@ -5343,7 +4960,6 @@ r*******************************************************************************
                     AI_HudCountdownHide  ,
 
 #define AI_HudCountdownHide_LENGTH   (AICMDSIZE    )
-
 
 
 # 8654 "src/aicommands.def"
@@ -5364,7 +4980,6 @@ r*******************************************************************************
 #define AI_HudCountdownSet_LENGTH   (AICMDSIZE +2    )
 
 
-
 //==============================================================================
 //## HUD COUNTDOWN STOP
 //==============================================================================
@@ -5377,7 +4992,6 @@ r*******************************************************************************
                     AI_HudCountdownStop  ,
 
 #define AI_HudCountdownStop_LENGTH   (AICMDSIZE    )
-
 
 
 # 8718 "src/aicommands.def"
@@ -5393,7 +5007,6 @@ r*******************************************************************************
                     AI_HudCountdownStart  ,
 
 #define AI_HudCountdownStart_LENGTH   (AICMDSIZE    )
-
 
 
 # 8748 "src/aicommands.def"
@@ -5413,7 +5026,6 @@ r*******************************************************************************
                     GOTOLABEL ,
 
 #define AI_IFHudCountdownIsNotRunning_LENGTH   (AICMDSIZE +1    )
-
 
 
 //==============================================================================
@@ -5436,7 +5048,6 @@ r*******************************************************************************
 #define AI_IFHudCountdownLessThan_LENGTH   (AICMDSIZE +2   +1    )
 
 
-
 //==============================================================================
 //## IF HUD COUNTDOWN GREATER THAN
 //==============================================================================
@@ -5455,7 +5066,6 @@ r*******************************************************************************
                     GOTOLABEL ,
 
 #define AI_IFHudCountdownGreaterThan_LENGTH   (AICMDSIZE +2   +1    )
-
 
 
 //==============================================================================
@@ -5484,7 +5094,6 @@ r*******************************************************************************
                     GOTOLABEL ,
 
 #define AI_TRYSpawningChrAtPad_LENGTH   (AICMDSIZE +1   +1   +2   +2   +4   +1    )
-
 
 
 # 8921 "src/aicommands.def"
@@ -5516,7 +5125,6 @@ r*******************************************************************************
 #define AI_TRYSpawningChrNextToChr_LENGTH   (AICMDSIZE +1   +1   +1   +2   +4   +1    )
 
 
-
 # 8969 "src/aicommands.def"
 //==============================================================================
 //## GUARD TRY SPAWNING ITEM
@@ -5545,7 +5153,6 @@ r*******************************************************************************
 #define AI_TRYGiveMeItem_LENGTH   (AICMDSIZE +2   +1   +4   +1    )
 
 
-
 # 9072 "src/aicommands.def"
 //==============================================================================
 //## GUARD TRY SPAWNING HAT
@@ -5571,7 +5178,6 @@ r*******************************************************************************
 #define AI_TRYGiveMeHat_LENGTH   (AICMDSIZE +2   +4   +1    )
 
 
-
 //==============================================================================
 //## CHR TRY SPAWNING CLONE
 //==============================================================================
@@ -5594,7 +5200,6 @@ r*******************************************************************************
 #define AI_TRYCloningChr_LENGTH   (AICMDSIZE +1   +2   +1    )
 
 
-
 # 9233 "src/aicommands.def"
 /*******************************************************************************
   If I have clone flag on, spawn a clone
@@ -5606,7 +5211,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define TRYCloningMe(AI_LIST_ID, GOTOLABEL)  \
                 TRYCloningChr(CHR_SELF, AI_LIST_ID, GOTOLABEL)
-
 
 
 # 9249 "src/aicommands.def"
@@ -5628,7 +5232,6 @@ r*******************************************************************************
 #define AI_TextPrintBottom_LENGTH   (AICMDSIZE +2    )
 
 
-
 //==============================================================================
 //## TEXT PRINT TOP
 //==============================================================================
@@ -5645,7 +5248,6 @@ r*******************************************************************************
                     CharArrayFrom16(TEXT_SLOT) ,
 
 #define AI_TextPrintTop_LENGTH   (AICMDSIZE +2    )
-
 
 
 //==============================================================================
@@ -5681,7 +5283,6 @@ r*******************************************************************************
 #define AI_SfxPlay_LENGTH   (AICMDSIZE +2   +1    )
 
 
-
 # 9372 "src/aicommands.def"
 //POLYMORPHS
 /*******************************************************************************
@@ -5703,7 +5304,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define SFX_PLAY_SIMPLE(SOUND_NUM)  \
                 SfxPlay(SOUND_NUM, -1)
-
 
 
 # 9379 "src/aicommands.def"
@@ -5728,7 +5328,6 @@ r*******************************************************************************
 #define AI_SfxEmitFromObject_LENGTH   (AICMDSIZE +1   +1   +2    )
 
 
-
 //==============================================================================
 //## SFX EMIT FROM PAD
 //==============================================================================
@@ -5748,7 +5347,6 @@ r*******************************************************************************
                     CharArrayFrom16(VOL_DECAY_TIME60) ,
 
 #define AI_SfxEmitFromPad_LENGTH   (AICMDSIZE +1   +2   +2    )
-
 
 
 //==============================================================================
@@ -5773,7 +5371,6 @@ r*******************************************************************************
 #define AI_SfxSetChannelVolume_LENGTH   (AICMDSIZE +1   +2   +2    )
 
 
-
 //==============================================================================
 //## SFX FADE CHANNEL VOLUME
 //==============================================================================
@@ -5796,7 +5393,6 @@ r*******************************************************************************
 #define AI_SfxFadeChannelVolume_LENGTH   (AICMDSIZE +1   +2   +2    )
 
 
-
 //==============================================================================
 //## SFX STOP CHANNEL
 //==============================================================================
@@ -5810,7 +5406,6 @@ r*******************************************************************************
                     CHANNEL_NUM ,
 
 #define AI_SfxStopChannel_LENGTH   (AICMDSIZE +1    )
-
 
 
 # 9627 "src/aicommands.def"
@@ -5836,7 +5431,6 @@ r*******************************************************************************
 #define AI_IFSfxChannelVolumeLessThan_LENGTH   (AICMDSIZE +1   +2   +1    )
 
 
-
 //==============================================================================
 //# SFX COMMANDS END
 //==============================================================================
@@ -5856,7 +5450,6 @@ r*******************************************************************************
                     PATH_NUM ,
 
 #define AI_VehicleStartPath_LENGTH   (AICMDSIZE +1    )
-
 
 
 //==============================================================================
@@ -5879,7 +5472,6 @@ r*******************************************************************************
 #define AI_VehicleSpeed_LENGTH   (AICMDSIZE +2   +2    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Sets vehicle speed, usually paired with VEHICLE_START_PATH
@@ -5890,7 +5482,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define VEHICLE_SPEED_MPH(TOP_SPEED, MPH_PER_SECOND)  \
                 VehicleSpeed((TOP_SPEED * 447), TOP_SPEED*(60/MPH_PER_SECOND))
-
 
 
 # 9766 "src/aicommands.def"
@@ -5905,7 +5496,6 @@ r*******************************************************************************
                 VehicleSpeed((TOP_SPEED * 278), TOP_SPEED*(60/KPH_PER_SECOND))
 
 
-
 # 9770 "src/aicommands.def"
 /*******************************************************************************
   Sets vehicle speed, usually paired with VEHICLE_START_PATH
@@ -5916,7 +5506,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define VEHICLE_SPEED_MS(TOP_SPEED, MSS)  \
                 VehicleSpeed((TOP_SPEED * 1000), TOP_SPEED*(60/MSS))
-
 
 
 # 9774 "src/aicommands.def"
@@ -5940,7 +5529,6 @@ r*******************************************************************************
 #define AI_AircraftRotorSpeed_LENGTH   (AICMDSIZE +2   +2    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Sets aircrafts rotor speed
@@ -5951,7 +5539,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define AIRCRAFT_ROTOR_SPEED_RPMS(ROTOR_SPEED, RPMS)  \
                 AircraftRotorSpeed(ROTOR_SPEED, ROTOR_SPEED*(60/RPMS))
-
 
 
 # 9822 "src/aicommands.def"
@@ -5976,7 +5563,6 @@ r*******************************************************************************
 #define AI_IFCameraIsInIntro_LENGTH   (AICMDSIZE +1    )
 
 
-
 //==============================================================================
 //## IF CAMERA IS IN BOND SWIRL
 //==============================================================================
@@ -5993,7 +5579,6 @@ r*******************************************************************************
                     GOTOLABEL ,
 
 #define AI_IFCameraIsInBondSwirl_LENGTH   (AICMDSIZE +1    )
-
 
 
 //==============================================================================
@@ -6016,7 +5601,6 @@ r*******************************************************************************
 #define AI_TvChangeScreenBank_LENGTH   (AICMDSIZE +1   +1   +1    )
 
 
-
 //==============================================================================
 //## IF BOND IN TANK
 //==============================================================================
@@ -6032,7 +5616,6 @@ r*******************************************************************************
                     GOTOLABEL ,
 
 #define AI_IFBondInTank_LENGTH   (AICMDSIZE +1    )
-
 
 
 //==============================================================================
@@ -6052,7 +5635,6 @@ r*******************************************************************************
                     AI_EndLevel  ,
 
 #define AI_EndLevel_LENGTH   (AICMDSIZE    )
-
 
 
 //==============================================================================
@@ -6091,7 +5673,6 @@ r*******************************************************************************
 #define AI_CameraReturnToBond_LENGTH   (AICMDSIZE    )
 
 
-
 # 10102 "src/aicommands.def"
 //POLYMORPHS
 //==============================================================================
@@ -6113,7 +5694,6 @@ r*******************************************************************************
                     CharArrayFrom16(PAD) ,
 
 #define AI_CameraLookAtBondFromPad_LENGTH   (AICMDSIZE +2    )
-
 
 
 //==============================================================================
@@ -6142,7 +5722,6 @@ r*******************************************************************************
 #define AI_CameraSwitch_LENGTH   (AICMDSIZE +1   +2   +2    )
 
 
-
 //==============================================================================
 //## IF BOND Y POS LESS THAN
 //==============================================================================
@@ -6163,7 +5742,6 @@ r*******************************************************************************
                     GOTOLABEL ,
 
 #define AI_IFBondYPosLessThan_LENGTH   (AICMDSIZE +2   +1    )
-
 
 
 //==============================================================================
@@ -6191,7 +5769,6 @@ r*******************************************************************************
 #define AI_BondDisableControl_LENGTH   (AICMDSIZE +1    )
 
 
-
 //==============================================================================
 //## HUD SHOW ALL AND UNLOCK CONTROLS AND RESUME MISSION TIME
 //==============================================================================
@@ -6207,7 +5784,6 @@ r*******************************************************************************
                     AI_BondEnableControl  ,
 
 #define AI_BondEnableControl_LENGTH   (AICMDSIZE    )
-
 
 
 //==============================================================================
@@ -6229,7 +5805,6 @@ r*******************************************************************************
 #define AI_TRYTeleportingChrToPad_LENGTH   (AICMDSIZE +1   +2   +1    )
 
 
-
 # 10426 "src/aicommands.def"
 //POLYMORPHS
 /*******************************************************************************
@@ -6239,7 +5814,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define TRYTeleportingMeToPad(PAD, GOTOLABEL)  \
                 TRYTeleportingChrToPad(CHR_SELF, PAD, GOTOLABEL)
-
 
 
 # 10433 "src/aicommands.def"
@@ -6259,7 +5833,6 @@ r*******************************************************************************
 #define AI_ScreenFadeToBlack_LENGTH   (AICMDSIZE    )
 
 
-
 //==============================================================================
 //## SCREEN FADE FROM BLACK
 //==============================================================================
@@ -6274,7 +5847,6 @@ r*******************************************************************************
                     AI_ScreenFadeFromBlack  ,
 
 #define AI_ScreenFadeFromBlack_LENGTH   (AICMDSIZE    )
-
 
 
 //==============================================================================
@@ -6295,7 +5867,6 @@ r*******************************************************************************
 #define AI_IFScreenFadeCompleted_LENGTH   (AICMDSIZE +1    )
 
 
-
 //==============================================================================
 //## CHR HIDE ALL
 //==============================================================================
@@ -6313,7 +5884,6 @@ r*******************************************************************************
 #define AI_HideAllChrs_LENGTH   (AICMDSIZE    )
 
 
-
 //==============================================================================
 //## CHR SHOW ALL
 //==============================================================================
@@ -6326,7 +5896,6 @@ r*******************************************************************************
                     AI_ShowAllChrs  ,
 
 #define AI_ShowAllChrs_LENGTH   (AICMDSIZE    )
-
 
 
 //==============================================================================
@@ -6350,7 +5919,6 @@ r*******************************************************************************
 #define AI_DoorOpenInstant_LENGTH   (AICMDSIZE +1    )
 
 
-
 //==============================================================================
 //## CHR REMOVE ITEM IN HAND
 //==============================================================================
@@ -6367,7 +5935,6 @@ r*******************************************************************************
                     HAND_INDEX ,
 
 #define AI_ChrRemoveItemInHand_LENGTH   (AICMDSIZE +1   +1    )
-
 
 
 //==============================================================================
@@ -6389,7 +5956,6 @@ r*******************************************************************************
 #define AI_IfNumberOfActivePlayersLessThan_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   If Single Player
@@ -6398,7 +5964,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define IFSinglePlayer(GOTOLABEL)  \
                 IfNumberOfActivePlayersLessThan(2, GOTOLABEL)
-
 
 
 # 10765 "src/aicommands.def"
@@ -6422,7 +5987,6 @@ r*******************************************************************************
 #define AI_IFBondItemTotalAmmoLessThan_LENGTH   (AICMDSIZE +1   +1   +1    )
 
 
-
 //==============================================================================
 //## BOND EQUIP ITEM
 //==============================================================================
@@ -6440,7 +6004,6 @@ r*******************************************************************************
 #define AI_BondEquipItem_LENGTH   (AICMDSIZE +1    )
 
 
-
 //==============================================================================
 //## BOND EQUIP ITEM CINEMA
 //==============================================================================
@@ -6456,7 +6019,6 @@ r*******************************************************************************
                     ITEM_NUM ,
 
 #define AI_BondEquipItemCinema_LENGTH   (AICMDSIZE +1    )
-
 
 
 //==============================================================================
@@ -6480,7 +6042,6 @@ r*******************************************************************************
 #define AI_BondSetLockedVelocity_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 # 10911 "src/aicommands.def"
 //==============================================================================
 //## IF OBJECT IN ROOM WITH PAD
@@ -6501,7 +6062,6 @@ r*******************************************************************************
 #define AI_IFObjectInRoomWithPad_LENGTH   (AICMDSIZE +1   +2   +1    )
 
 
-
 //==============================================================================
 //## IF GUARD IS FIRING AND LOCKED FORWARD
 //==============================================================================
@@ -6517,7 +6077,6 @@ r*******************************************************************************
                     GOTOLABEL ,
 
 #define AI_IFImFiringAndLockedForward_LENGTH   (AICMDSIZE +1    )
-
 
 
 //==============================================================================
@@ -6537,7 +6096,6 @@ r*******************************************************************************
 #define AI_IFImFiring_LENGTH   (AICMDSIZE +1    )
 
 
-
 //==============================================================================
 //## SWITCH ENVIRONMENT
 //==============================================================================
@@ -6553,7 +6111,6 @@ r*******************************************************************************
                     AI_SwitchSky  ,
 
 #define AI_SwitchSky_LENGTH   (AICMDSIZE    )
-
 
 
 # 11074 "src/aicommands.def"
@@ -6575,7 +6132,6 @@ r*******************************************************************************
 #define AI_TriggerFadeAndExitLevelOnButtonPress_LENGTH   (AICMDSIZE    )
 
 
-
 //==============================================================================
 //## IF BOND IS DEAD
 //==============================================================================
@@ -6591,7 +6147,6 @@ r*******************************************************************************
                     GOTOLABEL ,
 
 #define AI_IFBondIsDead_LENGTH   (AICMDSIZE +1    )
-
 
 
 //==============================================================================
@@ -6612,7 +6167,6 @@ r*******************************************************************************
 #define AI_BondDisableDamageAndPickups_LENGTH   (AICMDSIZE    )
 
 
-
 # 11184 "src/aicommands.def"
 //==============================================================================
 //## BOND HIDE WEAPONS
@@ -6626,7 +6180,6 @@ r*******************************************************************************
                     AI_BondHideWeapons  ,
 
 #define AI_BondHideWeapons_LENGTH   (AICMDSIZE    )
-
 
 
 //==============================================================================
@@ -6664,7 +6217,6 @@ r*******************************************************************************
 #define AI_CameraOrbitPad_LENGTH   (AICMDSIZE +2   +2   +2   +2   +2   +2    )
 
 
-
 //==============================================================================
 //## CREDITS ROLL
 //==============================================================================
@@ -6679,7 +6231,6 @@ r*******************************************************************************
                     AI_CreditsRoll  ,
 
 #define AI_CreditsRoll_LENGTH   (AICMDSIZE    )
-
 
 
 # 11313 "src/aicommands.def"
@@ -6700,7 +6251,6 @@ r*******************************************************************************
 #define AI_IFCreditsHasCompleted_LENGTH   (AICMDSIZE +1    )
 
 
-
 //==============================================================================
 //## IF OBJECTIVE ALL COMPLETED
 //==============================================================================
@@ -6719,7 +6269,6 @@ r*******************************************************************************
                     GOTOLABEL ,
 
 #define AI_IFObjectiveAllCompleted_LENGTH   (AICMDSIZE +1    )
-
 
 
 //==============================================================================
@@ -6746,7 +6295,6 @@ r*******************************************************************************
 #define AI_IFFolderActorIsEqual_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 //==============================================================================
 //## IF BOND DAMAGE AND PICKUPS DISABLED
 //==============================================================================
@@ -6765,7 +6313,6 @@ r*******************************************************************************
                     GOTOLABEL ,
 
 #define AI_IFBondDamageAndPickupsDisabled_LENGTH   (AICMDSIZE +1    )
-
 
 
 //==============================================================================
@@ -6792,7 +6339,6 @@ r*******************************************************************************
 #define AI_MusicPlaySlot_LENGTH   (AICMDSIZE +1   +1   +1    )
 
 
-
 # 11519 "src/aicommands.def"
 //==============================================================================
 //## MUSIC XTRACK STOP
@@ -6816,7 +6362,6 @@ r*******************************************************************************
 #define AI_MusicStopSlot_LENGTH   (AICMDSIZE +1    )
 
 
-
 # 11557 "src/aicommands.def"
 //==============================================================================
 //## TRIGGER EXPLOSIONS AROUND BOND
@@ -6832,7 +6377,6 @@ r*******************************************************************************
                     AI_TriggerExplosionsAroundBond  ,
 
 #define AI_TriggerExplosionsAroundBond_LENGTH   (AICMDSIZE    )
-
 
 
 # 11589 "src/aicommands.def"
@@ -6857,7 +6401,6 @@ r*******************************************************************************
 #define AI_IFKilledCiviliansGreaterThan_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 //==============================================================================
 //## IF CHR WAS SHOT SINCE LAST CHECK
 //==============================================================================
@@ -6879,7 +6422,6 @@ r*******************************************************************************
 #define AI_IFChrWasShotSinceLastCheck_LENGTH   (AICMDSIZE +1   +1    )
 
 
-
 //==============================================================================
 //## BOND KILLED IN ACTION
 //==============================================================================
@@ -6896,7 +6438,6 @@ r*******************************************************************************
 #define AI_BondKilledInAction_LENGTH   (AICMDSIZE    )
 
 
-
 # 11707 "src/aicommands.def"
 //==============================================================================
 //## GUARD RAISES ARMS
@@ -6910,7 +6451,6 @@ r*******************************************************************************
                     AI_RaiseArms  ,
 
 #define AI_RaiseArms_LENGTH   (AICMDSIZE    )
-
 
 
 # 11737 "src/aicommands.def"
@@ -6934,7 +6474,6 @@ r*******************************************************************************
 #define AI_GasLeakAndFadeFog_LENGTH   (AICMDSIZE    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Trigger gas leak event and slowly transition fog to the next fogs slot
@@ -6948,7 +6487,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define FADE_FOG()  \
                 GasLeakAndFadeFog()
-
 
 
 # 11790 "src/aicommands.def"
@@ -6971,7 +6509,6 @@ r*******************************************************************************
 #define AI_ObjectRocketLaunch_LENGTH   (AICMDSIZE +1    )
 
 
-
 //POLYMORPHS
 /*******************************************************************************
   Launch a tagged object like a rocket
@@ -6982,7 +6519,6 @@ r*******************************************************************************
 *******************************************************************************/
 #define PROP_DROP_FROM_ATTACHMENT(OBJECT_TAG)  \
                 ObjectRocketLaunch(OBJECT_TAG)
-
 
 
 # 11846 "src/aicommands.def"
