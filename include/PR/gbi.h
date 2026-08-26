@@ -1725,10 +1725,29 @@ typedef struct {
 /*
  * Generic Gfx Packet
  */
+#ifdef GEPC
+/* A display list command is 64 bits on the N64, and every display list the
+ * game reads out of the ROM -- room geometry, models, the lot -- is laid out
+ * that way. Widening these to uintptr_t would make sizeof(Gfx) 16 on a 64-bit
+ * host and desynchronise the walker from the data on the very first command,
+ * so the PC build keeps them 32 bits wide and stores pointers truncated.
+ *
+ * That is only sound because every address a display list can hold fits in 32
+ * bits: the RDRAM arena is mapped below 16 MB (see port/src/rdram.c) and the
+ * executable is linked no-pie so its static display lists land low too.
+ * gepcAssertLowMemory() checks the second half of that at startup, because a
+ * silently truncated pointer would otherwise surface as corrupt geometry
+ * rather than as an error. */
+typedef struct {
+	u32 w0;
+	u32 w1;
+} Gwords;
+#else
 typedef struct {
 	uintptr_t w0;
 	uintptr_t w1;
 } Gwords;
+#endif
 
 /*
  * This union is the fundamental type of the display list.

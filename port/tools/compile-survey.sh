@@ -19,7 +19,9 @@ cd "$ROOT" || exit 1
 # *after* the system directories.
 FLAGS=(
     -fsyntax-only -std=gnu99
-    -D_LANGUAGE_C -DGEPC -DVERSION_US -DREFRESH_NTSC
+    -D_LANGUAGE_C -DGEPC
+    -DVERSION_US -DLANG_US -DREFRESH_NTSC
+    -DLEFTOVERDEBUG -DLEFTOVERSPECTRUM -DBUGFIX_R0 -DBYTEMATCH
     -Iport/include -include gepc_prelude.h
     -idirafter . -idirafter include -idirafter include/PR
     -idirafter src -idirafter src/game -idirafter src/libultra

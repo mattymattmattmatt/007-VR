@@ -1,4 +1,5 @@
 #include <ultra64.h>
+#include <gbi_extension.h>
 #include "bondview.h"
 #include "lv.h"
 #include "unk_092E50.h"
@@ -261,16 +262,16 @@ void sub_GAME_7F092E50(void)
         flt_CODE_bss_80079E88 += 6.2831802f;
     }
     
-    MipMap2C_Something_Setup[2].loadtile.sl = flt_CODE_bss_80079E80;
-    MipMap2C_Something_Setup[2].loadtile.tl = flt_CODE_bss_80079E84;
-    MipMap2C_Something_Setup[3].loadtile.sl = ((s32)flt_CODE_bss_80079E80 + 90) & 0xFF;
-    MipMap2C_Something_Setup[3].loadtile.tl = ((s32)flt_CODE_bss_80079E84 + 150) & 0xFF;
+    GFX_SET_TILE_SL(&MipMap2C_Something_Setup[2], flt_CODE_bss_80079E80);
+    GFX_SET_TILE_TL(&MipMap2C_Something_Setup[2], flt_CODE_bss_80079E84);
+    GFX_SET_TILE_SL(&MipMap2C_Something_Setup[3], ((s32)flt_CODE_bss_80079E80 + 90) & 0xFF);
+    GFX_SET_TILE_TL(&MipMap2C_Something_Setup[3], ((s32)flt_CODE_bss_80079E84 + 150) & 0xFF);
     ((u32 *) MipMap2C_Something_Setup)[8] = (((u32 *) MipMap2C_Something_Setup)[8] & ~0xFF) | (u32) ((sinf(flt_CODE_bss_80079E88) * 127.0f) + 128.0f);
 
-    MipMap2C_Something2_Setup[2].loadtile.sl = flt_CODE_bss_80079E80;
-    MipMap2C_Something2_Setup[2].loadtile.tl = flt_CODE_bss_80079E84;
-    MipMap2C_Something2_Setup[3].loadtile.sl = ((s32)flt_CODE_bss_80079E80 + 90) & 0xFF;
-    MipMap2C_Something2_Setup[3].loadtile.tl = ((s32)flt_CODE_bss_80079E84 + 150) & 0xFF;
+    GFX_SET_TILE_SL(&MipMap2C_Something2_Setup[2], flt_CODE_bss_80079E80);
+    GFX_SET_TILE_TL(&MipMap2C_Something2_Setup[2], flt_CODE_bss_80079E84);
+    GFX_SET_TILE_SL(&MipMap2C_Something2_Setup[3], ((s32)flt_CODE_bss_80079E80 + 90) & 0xFF);
+    GFX_SET_TILE_TL(&MipMap2C_Something2_Setup[3], ((s32)flt_CODE_bss_80079E84 + 150) & 0xFF);
     ((u32 *) MipMap2C_Something2_Setup)[8] = (((u32 *) MipMap2C_Something_Setup)[8] & ~0xFF) | (u32) ((sinf(flt_CODE_bss_80079E88) * 127.0f) + 128.0f);
 }
 

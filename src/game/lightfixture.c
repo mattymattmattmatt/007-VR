@@ -177,12 +177,12 @@ Vtx *lightFindVertexBaseForTri(Gfx *gfx, s32 room_index)
 {
     Vtx * ret;
 
-    while (gfx->dma.cmd != G_VTX )
+    while (GFX_CMD(gfx) != G_VTX )
     { 
         gfx--; 
     }
 
-    ret = gfx->dma.addr;
+    ret = (Vtx *)(uintptr_t)GFX_DMA_ADDR(gfx);
 
     if (((s32) ret & 0xFF000000) == 0x0E000000) 
     {
@@ -198,9 +198,9 @@ void extract_vertex_indices_from_triangle(Gfx* gfx, u32 tri_type, s32* idx1, s32
     switch (tri_type) 
     {
         case 0:
-            *idx1 = (s32) gfx->tri.tri.v[0] / 10;
-            *idx2 = (s32) gfx->tri.tri.v[1] / 10;
-            *idx3 = (s32) gfx->tri.tri.v[2] / 10;
+            *idx1 = (s32) GFX_TRI_V(gfx, 0) / 10;
+            *idx2 = (s32) GFX_TRI_V(gfx, 1) / 10;
+            *idx3 = (s32) GFX_TRI_V(gfx, 2) / 10;
             break;
         // unsure of how to cleanly access the below versions
         case 1:
@@ -541,7 +541,7 @@ void lightFixtureBreak(Gfx * hit_gfx, u32 tri_type, s32 room_index)
          */
         for (fixture_gfx = light_fixture_table[i].ptr_start_pertinent_DL; fixture_gfx < light_fixture_table[i].ptr_end_pertinent_DL; fixture_gfx++)
         {
-            if (fixture_gfx->dma.cmd == G_TRI1)
+            if (GFX_CMD(fixture_gfx) == G_TRI1)
             {
                 darken_tri1 = 0;
  
@@ -565,7 +565,7 @@ void lightFixtureBreak(Gfx * hit_gfx, u32 tri_type, s32 room_index)
                     darken_triangle_in_room(fixture_gfx, 0, light_fixture_table[i].room_index);
                 }
             }
-            else if (fixture_gfx->dma.cmd == G_TRI4)
+            else if (GFX_CMD(fixture_gfx) == G_TRI4)
             {
                 for (j = 0; j < 4; j++)
                 {

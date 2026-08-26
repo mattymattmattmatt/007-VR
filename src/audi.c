@@ -1,4 +1,5 @@
 #include <ultra64.h>
+#include <ido_compat.h>
 #include <PR/os.h>
 #include "sched.h"
 #include "audi.h"
@@ -359,7 +360,8 @@ void amCreateAudioManager(ALSynConfig* alconf)
 
     if (alconf->fxType == AL_FX_CUSTOM)
     {
-        s32 sp48[CUSTOM_FX_SECTION_COUNT * CUSTOM_FX_SECTION_SIZE + 2] = CUSTOM_FX_PARAMS_N;
+        IDO_ARRAY_INIT(s32 sp48[CUSTOM_FX_SECTION_COUNT * CUSTOM_FX_SECTION_SIZE + 2],
+                       sp48, CUSTOM_FX_PARAMS_N);
         alconf->params = sp48;
         alInit(&g_AudioManager.g, alconf);
     }

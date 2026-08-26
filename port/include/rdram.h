@@ -59,6 +59,21 @@ void *rdramAlloc(unsigned size, unsigned align);
 void *rdramPoolStart(void);
 unsigned rdramPoolSize(void);
 
+/* The arena covers memory the game allocates, but not the memory it was
+ * linked with. The game also builds display lists out of statically
+ * initialised Gfx arrays (src/game/unk_092E50.c animates one in place) and
+ * points at static vertex and texture data, and a Gfx command word is 32 bits
+ * wide -- see the GEPC branch of Gwords in include/PR/gbi.h. So the
+ * executable's own .data and .rodata have to sit below 4 GB as well, which is
+ * what -no-pie buys on x86-64.
+ *
+ * A PIE build loads far above 4 GB, and every such pointer would truncate
+ * silently: the display list would still walk, the triangle counts would still
+ * look right, and the geometry would be garbage. That is the same failure the
+ * self-test caught before, so this checks the linkage at startup and panics
+ * rather than letting it render. */
+void gepcAssertLowMemory(void);
+
 #ifdef __cplusplus
 }
 #endif

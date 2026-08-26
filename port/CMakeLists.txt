@@ -94,6 +94,24 @@ endif()
 
 target_link_libraries(ge007_platform PUBLIC Threads::Threads)
 
+# A display list command word is 32 bits (see the GEPC branch of Gwords in
+# include/PR/gbi.h), so every address the game can put in one has to fit. The
+# RDRAM arena handles everything the game allocates, but statically initialised
+# Gfx arrays and the vertex and texture data they point at live in the
+# executable's own .data and .rodata. A PIE build loads those far above 4 GB
+# and each pointer would truncate in silence -- the list still walks, the
+# counts still look right, the geometry is garbage.
+#
+# -no-pie puts the image at 0x400000 on x86-64 ELF. gepcAssertLowMemory()
+# verifies it at startup so a toolchain that ignores the flag (some
+# distributions force PIE through their spec files) fails loudly instead.
+if(NOT MSVC AND NOT APPLE)
+    include(CheckPIESupported OPTIONAL RESULT_VARIABLE _gepc_have_pie_module)
+    set(CMAKE_POSITION_INDEPENDENT_CODE OFF)
+    target_link_options(ge007_platform PUBLIC -no-pie)
+    target_compile_options(ge007_platform PUBLIC -fno-pie)
+endif()
+
 if(NOT MSVC)
     target_compile_options(ge007_platform PRIVATE -Wall -Wextra)
     if(GEPC_WERROR)
@@ -148,6 +166,11 @@ if(GEPC_BUILD_TESTS)
     target_link_libraries(ge007_rdram_tests PRIVATE ge007_platform)
     add_test(NAME ge007_rdram COMMAND ge007_rdram_tests)
     set_tests_properties(ge007_rdram PROPERTIES TIMEOUT 60)
+
+    add_executable(ge007_accessor_tests tests/test_gbi_accessors.c)
+    target_link_libraries(ge007_accessor_tests PRIVATE ge007_platform)
+    add_test(NAME ge007_gbi_accessors COMMAND ge007_accessor_tests)
+    set_tests_properties(ge007_gbi_accessors PROPERTIES TIMEOUT 60)
 
     add_executable(ge007_romdata_tests tests/test_romdata.c)
     target_link_libraries(ge007_romdata_tests PRIVATE ge007_platform)

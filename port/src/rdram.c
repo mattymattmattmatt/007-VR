@@ -64,6 +64,10 @@ int rdramInit(void)
         return 0;
     }
 
+    /* Before reserving anything, check the linkage the arena's whole premise
+     * rests on. Static display lists live in the executable, not in here. */
+    gepcAssertLowMemory();
+
     /* Walk upward looking for a free low region. The address is requested
      * exactly, never merely hinted, because a kernel that quietly relocates
      * the mapping somewhere high would reintroduce the bug above. */
@@ -192,4 +196,36 @@ unsigned rdramPoolSize(void)
     }
     start = (g_used + 15u) & ~15u;
     return (start < g_size) ? (g_size - start) : 0;
+}
+
+/* Deliberately non-const and non-static-const so both .data and .rodata get
+ * sampled; a linker that split them across the 4 GB line would be caught here
+ * rather than in the renderer. */
+static unsigned g_lowMemoryProbeData = 1u;
+static const unsigned g_lowMemoryProbeRodata = 1u;
+
+void gepcAssertLowMemory(void)
+{
+    const void *probes[2];
+    const char *names[2];
+    int i;
+
+    probes[0] = (const void *)&g_lowMemoryProbeData;
+    names[0]  = ".data";
+    probes[1] = (const void *)&g_lowMemoryProbeRodata;
+    names[1]  = ".rodata";
+
+    for (i = 0; i < 2; i++) {
+        unsigned long long a = (unsigned long long)(uintptr_t)probes[i];
+
+        if (a > 0xFFFFFFFFULL) {
+            platformPanic(
+                "ge007: %s is linked at 0x%llx, above 4 GB.\n"
+                "Display list command words are 32 bits wide, so every pointer "
+                "the game stores in one would be truncated and the geometry "
+                "would render as garbage without any error.\n"
+                "Link the port with -no-pie (see port/CMakeLists.txt).",
+                names[i], a);
+        }
+    }
 }

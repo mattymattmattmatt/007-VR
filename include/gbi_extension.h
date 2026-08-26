@@ -10,6 +10,50 @@
  */
 
 /**
+ * Reading a display list back on the CPU.
+ *
+ * gbi.h overlays Gdma/Gtri/Gloadtile on the command words as bit-fields, but
+ * those only describe the hardware's layout on a big-endian 32-bit target --
+ * gbi.h excludes them everywhere else, and says so. A handful of routines do
+ * need to inspect a list from the CPU (bg.c walks room lists to bound their
+ * vertices, lightfixture.c resolves the vertices behind a triangle, and
+ * unk_092E50.c animates tile origins in place), so they go through these
+ * instead.
+ *
+ * These read the *values* of w0/w1 rather than their bytes, so they give the
+ * same answer on any host: the display list is built by the gs* macros out of
+ * _SHIFTL expressions, which put each field at the same bit positions no
+ * matter what the machine's byte order is.
+ *
+ * GFX_CMD sign-extends deliberately. gbi.h declares the opcode as `int cmd:8`
+ * and gives the immediate-mode commands negative values (G_IMMFIRST is -65,
+ * so G_ENDDL is -72 and G_SETTILE is annotated `0xf5 -11`), so comparing an
+ * unsigned byte against G_ENDDL would never match and the walk would run off
+ * the end of the list.
+ */
+#define GFX_CMD(g)          ((s32)(s8)(((g)->words.w0 >> 24) & 0xFFu))
+#define GFX_DMA_PAR(g)      ((u32)(((g)->words.w0 >> 16) & 0xFFu))
+#define GFX_DMA_LEN(g)      ((u32)((g)->words.w0 & 0xFFFFu))
+#define GFX_DMA_ADDR(g)     ((g)->words.w1)
+
+/* Tri packs flag, v[0], v[1], v[2] into w1 from the top byte down. */
+#define GFX_TRI_FLAG(g)     ((u32)(((g)->words.w1 >> 24) & 0xFFu))
+#define GFX_TRI_V(g, i)     ((u32)(((g)->words.w1 >> (16 - 8 * (i))) & 0xFFu))
+
+/* Gloadtile (also loadblock, settilesize and loadtlut) keeps sl at bits 12-23
+ * of w0 and tl at bits 0-11. The setters truncate through s32 first: the call
+ * sites assign floats, and float-to-unsigned is undefined for a negative
+ * value while float-to-signed matches what the N64 compiler emitted. */
+#define GFX_TILE_SL(g)      ((u32)(((g)->words.w0 >> 12) & 0xFFFu))
+#define GFX_TILE_TL(g)      ((u32)((g)->words.w0 & 0xFFFu))
+#define GFX_SET_TILE_SL(g, v)                                           \
+    ((g)->words.w0 = ((g)->words.w0 & ~(u32)(0xFFFu << 12))             \
+                   | ((((u32)(s32)(v)) & 0xFFFu) << 12))
+#define GFX_SET_TILE_TL(g, v)                                           \
+    ((g)->words.w0 = ((g)->words.w0 & ~(u32)0xFFFu)                     \
+                   | (((u32)(s32)(v)) & 0xFFFu))
+
+/**
    These are some helper constants. Since they relate to nothing else except GBI
    macros, Ill place them here, to save reserving names that might be used
    elsewhere - though doubtfull.

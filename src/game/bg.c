@@ -226,12 +226,33 @@ struct levelentry levelinfotable[] = {
 u32 D_8004481C[] = {0x1000100, 0};
 
 //D:80044824
+#ifdef GEPC
+/* GCC refuses to initialise a flexible array member "in a nested context",
+ * which is exactly what this table is: entries of different lengths packed end
+ * to end inside an array. IDO accepted it, and the shape is really just a byte
+ * blob -- s_specialportal has alignment 1, so the entries sit byte-tight, and
+ * the only reader (sub_GAME_7F0B37EC) casts straight to u8 * and walks bytes
+ * looking for the 0xff that ends each entry. The PC build therefore spells the
+ * same 20 bytes out directly: 1 + 15 for the first entry, 1 + 3 for the
+ * second, identical layout either way.
+ *
+ * Note for the port: that reader also takes &g_BgCurrentRoom as its end
+ * pointer, so it depends on the linker placing that variable immediately after
+ * this table. The N64 link script guaranteed it; a host toolchain does not.
+ * The walk still terminates on its own 0xff markers, but the outer loop's
+ * bound is not trustworthy here and needs revisiting before this path runs. */
+u8 specialportalarray[] = {
+    0x03, 0x2C,0x2E,0x32, 0x37,0x3E,0x3F,0x4E, 0x56,0x59,0x5D,0x72, 0x76,0x79,0x7A,0xFF,
+    0x11, 0x00,0x3A,0xFF
+};
+#else
 s_specialportal specialportalarray[] = {
     {0x03,
         {0x2C,0x2E,0x32, 0x37,0x3E,0x3F,0x4E, 0x56,0x59,0x5D,0x72, 0x76,0x79,0x7A,0xFF}},
     {0x11,
         {0x00,0x3A,0xFF}}
 };
+#endif
 
 /**
  * Bond's current room.
@@ -2767,9 +2788,9 @@ void bgBuildRoomVtxBounds(s32 roomID)
     cmdindex = 0;
     numpoints = 0;
 
-    while (gdl[cmdindex].dma.cmd != G_ENDDL)
+    while (GFX_CMD(&gdl[cmdindex]) != G_ENDDL)
     {
-        if (gdl[cmdindex].dma.cmd == G_VTX) 
+        if (GFX_CMD(&gdl[cmdindex]) == G_VTX) 
         {
             numpoints++;
         }
@@ -2791,9 +2812,9 @@ void bgBuildRoomVtxBounds(s32 roomID)
     numpoints = 0;
     cmdindex = 0;
 
-    while (gdl[cmdindex].dma.cmd != G_ENDDL)
+    while (GFX_CMD(&gdl[cmdindex]) != G_ENDDL)
     {
-        if (gdl[cmdindex].dma.cmd == G_VTX)
+        if (GFX_CMD(&gdl[cmdindex]) == G_VTX)
         {
             point = &points[numpoints];
 
@@ -2805,9 +2826,9 @@ void bgBuildRoomVtxBounds(s32 roomID)
                 points[numpoints].max[i] = -0x8000;
             }
 
-            numvertices = ((gdl[cmdindex].dma.par >> 4) & 0xf) + 1;
+            numvertices = ((GFX_DMA_PAR(&gdl[cmdindex]) >> 4) & 0xf) + 1;
 
-            vtx = (Vtx *)(SEGMENT_OFFSET(gdl[cmdindex].dma.addr) + (u32)vertices);
+            vtx = (Vtx *)(SEGMENT_OFFSET(GFX_DMA_ADDR(&gdl[cmdindex])) + (u32)vertices);
 
             for (i = 0; i < numvertices; i++)
             {

@@ -1,4 +1,5 @@
 #include <ultra64.h>
+#include <ido_compat.h>
 #include <bondaicommands.h>
 #include <bondgame.h>
 #include <bondconstants.h>
@@ -2482,7 +2483,7 @@ bool handles_shot_actors(ChrRecord *self, s32 hitpart, coord3d *vector, s32 weap
         }
         else //steel helmate - ricochet
         {
-            s16 mrs[3] = metal_ricochet_SFX;
+            IDO_ARRAY_INIT(s16 mrs[3], mrs, metal_ricochet_SFX);
             ALSoundState * p = sndPlaySfx((struct ALBankAlt_s *)g_musicSfxBufferPtr, mrs[randomGetNext() % 3U], NULL);
             chrobjSndCreatePostEventDefault(p, &self->prop->pos);
         }

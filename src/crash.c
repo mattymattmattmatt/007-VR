@@ -1,4 +1,5 @@
 #include <ultra64.h>
+#include <ido_compat.h>
 #include <PR/os.h>
 #include <bondgame.h>
 #include "fr.h"
@@ -728,8 +729,8 @@ u32 * crashIndyGetReadBufferResourceId(void)
  */
 void * crashGetStackEnd(u32 sp, u32 tid)
 {
-    void *localStackPointers1[STACK_POINTER_COUNT] = g_StackPtrs1;
-    void *localStackPointers2[STACK_POINTER_COUNT] = g_StackPtrs2;
+    IDO_ARRAY_INIT(void *localStackPointers1[STACK_POINTER_COUNT], localStackPointers1, g_StackPtrs1);
+    IDO_ARRAY_INIT(void *localStackPointers2[STACK_POINTER_COUNT], localStackPointers2, g_StackPtrs2);
     void *p2;
     void *p1;
 
@@ -766,7 +767,7 @@ void * crashGetStackEnd(u32 sp, u32 tid)
  */
 void * crashGetStackStart(u32 sp, u32 tid)
 {
-    void *localStackPointers3[STACK_POINTER_COUNT] = g_StackPtrs3;
+    IDO_ARRAY_INIT(void *localStackPointers3[STACK_POINTER_COUNT], localStackPointers3, g_StackPtrs3);
     void *p;
 
     if ((s32)tid <= (s32)0 || (u32)tid > (u32)STACK_POINTER_COUNT)
