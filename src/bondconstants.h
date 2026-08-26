@@ -4717,7 +4717,7 @@ typedef enum PROJECTILES
  * @param NUMJOINTS: (Optional Integer) Number of Joints
  */
 #define New_ModelSkeleton(NAME, SKELSIZE, HASNAMES, NUMJOINTS) \
-    ModelSkeleton SKELETON(##NAME##) = {                   \
+    ModelSkeleton SKELETON(NAME) = {                   \
     IF_ELSE(IS_EMPTY(NUMJOINTS))                           \
     (                                                      \
         sizeof(JOINTLIST(NAME))/sizeof(ModelJoint)         \
@@ -4726,7 +4726,7 @@ typedef enum PROJECTILES
         NUMJOINTS                                          \
     ),                                                     \
     0,                                                     \
-    JOINTLIST(##NAME##),                                   \
+    JOINTLIST(NAME),                                   \
     SKELSIZE,                                              \
     0                                                      \
     IF(AND(DEFINED(DEBUG), BOOL(HASNAMES)))                \
@@ -4735,7 +4735,7 @@ typedef enum PROJECTILES
     )                                                      \
     };
 
-#define MODELSKELETON(NAME, NUMJOINTS, SKELSIZE) ModelSkeleton SKELETON( ## NAME ## ) = {NUMJOINTS, 0, JOINTLIST( ## NAME ## ), SKELSIZE, 0};
+#define MODELSKELETON(NAME, NUMJOINTS, SKELSIZE) ModelSkeleton SKELETON(NAME) = {NUMJOINTS, 0, JOINTLIST(NAME), SKELSIZE, 0};
 
 
 /**
@@ -4760,7 +4760,7 @@ typedef enum PROJECTILES
     (                                                                                                                                        \
         ROOTNODE             /* Never Used */                                                                                                \
     ),                                                                                                                                       \
-    & ## SKELETON(SKELETONNAME),                                                                                                             \
+    &SKELETON(SKELETONNAME),                                                                                                             \
     IF_ELSE(IS_EMPTY(SWITCHES))                                                                                                              \
     (                                                                                                                                        \
         0                                                                                                                                    \
@@ -4815,13 +4815,13 @@ typedef enum PROJECTILES
 #endif
 
 #define CHRFILERECORD(NAME, SCALE, OFFSET, HASHEAD, ISMALE) \
-    {&##NAME##_header, STR(C##NAME##Z), SCALE, OFFSET, HASHEAD, ISMALE},
+    {&NAME##_header, STR(C##NAME##Z), SCALE, OFFSET, HASHEAD, ISMALE},
 
-#define GUNSTATS(NAME) & ## NAME ## _stats
+#define GUNSTATS(NAME) &NAME##_stats
 #define GUNFILERECORD(NAME, NOMODEL, STATS, UPPERTEXTID, LOWERTEXTID, POSX, POSY, POSZ, XROT, YROT, WOCTEXT, EQUIPTEXT, EQUIPX, EQUIPY, EQUIPZ) \
-    { & ## NAME ## _header,STR(G## NAME ##Z), NOMODEL, STATS, UPPERTEXTID, LOWERTEXTID, POSX, POSY, POSZ, XROT, YROT, WOCTEXT, EQUIPTEXT, EQUIPX, EQUIPY, EQUIPZ},
+    { &NAME##_header,STR(G## NAME ##Z), NOMODEL, STATS, UPPERTEXTID, LOWERTEXTID, POSX, POSY, POSZ, XROT, YROT, WOCTEXT, EQUIPTEXT, EQUIPX, EQUIPY, EQUIPZ},
 #define SUIT_LFRECORD(NAME, NOMODEL, STATS, UPPERTEXTID, LOWERTEXTID, POSX, POSY, POSZ, XROT, YROT, WOCTEXT, EQUIPTEXT, EQUIPX, EQUIPY, EQUIPZ) \
-    { & ## NAME ## _header,STR(C## NAME ##Z), NOMODEL, STATS, UPPERTEXTID, LOWERTEXTID, POSX, POSY, POSZ, XROT, YROT, WOCTEXT, EQUIPTEXT, EQUIPX, EQUIPY, EQUIPZ},
+    { &NAME##_header,STR(C## NAME ##Z), NOMODEL, STATS, UPPERTEXTID, LOWERTEXTID, POSX, POSY, POSZ, XROT, YROT, WOCTEXT, EQUIPTEXT, EQUIPX, EQUIPY, EQUIPZ},
 /**
  * Define a New Item Record
  * @param NAME:  Name of Model
