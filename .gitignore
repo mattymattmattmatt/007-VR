@@ -13,7 +13,14 @@ branchdiff_report.txt
 *.cdata*
 /StructLayoutSettings.json
 # rom files
-*.[zZnN]64
+# Covers every extension the port accepts (romdata.c detects z64, v64 and n64)
+# in either case, at any depth. The old pattern missed .v64 entirely, so a
+# byte-swapped cartridge dump sitting at the repository root was one `git add
+# -A` away from being committed. No game data belongs in this repository.
+*.[zZ]64
+*.[vV]64
+*.[nN]64
+baserom*
 
 021990.bin
 0219D0.bin
