@@ -313,6 +313,37 @@
  * @return TRUE/FALSE
 */
 #define DEFINED(x) _DEFINED(x)
+#ifdef GEPC
+/* The same invalid paste as IS_EMPTY above, from the other end. The trailing
+ * ##_ has to paste onto the *last* token of the argument, and chraidata.c
+ * reaches here with THIS already expanded to SETUPSUBROUTINES(0x0402), whose
+ * last token is ")". Pasting ")" with "_" cannot produce a token, so there is
+ * nothing valid for the preprocessor to do -- IDO juxtaposed them, and the
+ * probe below still matched.
+ *
+ * The tell is in the original itself: _DEFINED_SETUPSUBROUTINES(ID) is
+ * already written without a trailing underscore, because the author knew the
+ * "(" onwards had to absorb it. Moving the trailing marker out of the paste
+ * and emitting it as its own token reproduces exactly what IDO produced, and
+ * every probe is renamed to match.
+ *
+ * That trailing underscore is load-bearing, not decoration:
+ * _DEFINED_SETUPSUBROUTINES(ID) expands to "PROBE(~)," with a trailing comma,
+ * and the underscore is what follows it. Drop it and IS_PROBE gets an empty
+ * final argument, which is a syntax error rather than a wrong answer.
+ *
+ * CAT's first argument stays the undefined name _DEFINED rather than
+ * _DEFINED_: CAT expands its arguments before pasting, so a first argument
+ * that is itself a macro would expand to the probe prematurely. */
+#define _DEFINED(x) IS_PROBE(CAT(_DEFINED, _##x) _)
+#define _DEFINED_0 PROBE(~)
+#define _DEFINED_1 PROBE(~)
+#define _DEFINED_  PROBE(~)
+
+/*The following names are NOT defined and need to be regarded as NOTDEFINED */
+#define _DEFINED_THIS PROBE(~)
+#define _DEFINED_SETUPSUBROUTINES(ID) PROBE(~),
+#else
 #define _DEFINED(x) IS_PROBE(CAT(_DEFINED, _##x##_))
 #define _DEFINED_0_ PROBE(~)
 #define _DEFINED_1_ PROBE(~)
@@ -321,6 +352,7 @@
 /*The following names are NOT defined and need to be regarded as NOTDEFINED */
 #define _DEFINED_THIS_ PROBE(~)
 #define _DEFINED_SETUPSUBROUTINES(ID) PROBE(~),
+#endif
 
     /**
  * Logical negation. 0 or nothing is defined as false and everything else as
@@ -370,7 +402,7 @@
  * _VA_ARGS_ for c89
  * Allows up to 32 Args on the stack
  */
-#define EXPAND_ARGS_STACK(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,AA,AB,AC,AD,AE,AF,ERROR) \
+#define GEPC_EXPAND_ARGS_STACK_IMPL(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,AA,AB,AC,AD,AE,AF,ERROR) \
 IF_VA(NOT(IS_EMPTY(A)))/*
 */(/*
 	*/A /*
@@ -472,6 +504,42 @@ IF_VA(NOT(IS_EMPTY(A)))/*
 																																	*/COMMA() undefinedlocal = 1/0 "_VA_ARGS Stack full"/*
 																																*/)/*
 */)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)
+
+#ifdef GEPC
+/* Part of the AI-command DSL's C89 variadic emulation: the caller passes
+ * however many arguments it has and IS_EMPTY drops the rest. IDO allowed both
+ * too few and too many; C99 requires the declared count exactly. The body is
+ * unchanged and renamed, and this entry point pads a short call out to the
+ * declared arity while its variadic tail absorbs any surplus. */
+#define GEPC_EXPAND_ARGS_STACK_TAKE(                                          \
+    A, B, C, D, E, F, G, H, \
+    I, J, K, L, M, N, O, P, \
+    Q, R, S, T, U, V, W, X, \
+    Y, Z, AA, AB, AC, AD, AE, AF, \
+    ERROR, \
+    ...)                                                           \
+    GEPC_EXPAND_ARGS_STACK_IMPL(                                                        \
+    A, B, C, D, E, F, G, H, \
+    I, J, K, L, M, N, O, P, \
+    Q, R, S, T, U, V, W, X, \
+    Y, Z, AA, AB, AC, AD, AE, AF, \
+    ERROR)
+
+#define EXPAND_ARGS_STACK(...) GEPC_EXPAND_ARGS_STACK_TAKE(__VA_ARGS__,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,)
+#else
+/* Function-like, deliberately: several of these names appear as bare tokens
+ * in the DSL, and an object-like alias would expand them there and change
+ * what the ROM build sees. */
+#define EXPAND_ARGS_STACK(                                                        A, B, C, D, E, F, G, H, \
+    I, J, K, L, M, N, O, P, \
+    Q, R, S, T, U, V, W, X, \
+    Y, Z, AA, AB, AC, AD, AE, AF, \
+    ERROR)                                                         GEPC_EXPAND_ARGS_STACK_IMPL(                                                            A, B, C, D, E, F, G, H, \
+    I, J, K, L, M, N, O, P, \
+    Q, R, S, T, U, V, W, X, \
+    Y, Z, AA, AB, AC, AD, AE, AF, \
+    ERROR)
+#endif
 /**
  * Push/Pop VA Args arrays
  */

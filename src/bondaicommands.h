@@ -773,7 +773,7 @@ char *DOORSTATE_ToString[] = {
                   TEST_COMMAND, TEST_VALUE,
                       CASE_CONTENT,...)
  */
-#define SWITCH(VAR, \
+#define GEPC_SWITCH_IMPL(VAR, \
                CASE0, CASE_VAL0, CASE_CONTENT0,\
                CASE1, CASE_VAL1, CASE_CONTENT1,\
                CASE2, CASE_VAL2, CASE_CONTENT2,\
@@ -811,6 +811,50 @@ IF_VA(NOT(IS_EMPTY(CASE_CONTENT2)))(IF_VA(NOT(IS_EMPTY(CASE_CONTENT3)))(Label(lb
 IF_VA(NOT(IS_EMPTY(CASE_CONTENT1)))(IF_VA(NOT(IS_EMPTY(CASE_CONTENT2)))(Label(lblNext)) CASE0 (CASE_VAL0,lblNext) EXPAND_ARGS_STACK(CASE_CONTENT1)(lblDone))\
 IF_VA(NOT(IS_EMPTY(CASE_CONTENT0)))(IF_VA(NOT(IS_EMPTY(CASE_CONTENT1)))(Label(lblNext))                           EXPAND_ARGS_STACK(CASE_CONTENT0)(lblDone) \
 Label(lblDone))
+
+#ifdef GEPC
+/* Part of the AI-command DSL's C89 variadic emulation: the caller passes
+ * however many arguments it has and IS_EMPTY drops the rest. IDO allowed both
+ * too few and too many; C99 requires the declared count exactly. The body is
+ * unchanged and renamed, and this entry point pads a short call out to the
+ * declared arity while its variadic tail absorbs any surplus. */
+#define GEPC_SWITCH_TAKE(                                          \
+    VAR, CASE0, CASE_VAL0, CASE_CONTENT0, CASE1, CASE_VAL1, CASE_CONTENT1, CASE2, \
+    CASE_VAL2, CASE_CONTENT2, CASE3, CASE_VAL3, CASE_CONTENT3, CASE4, CASE_VAL4, CASE_CONTENT4, \
+    CASE5, CASE_VAL5, CASE_CONTENT5, CASE6, CASE_VAL6, CASE_CONTENT6, CASE7, CASE_VAL7, \
+    CASE_CONTENT7, CASE8, CASE_VAL8, CASE_CONTENT8, CASE9, CASE_VAL9, CASE_CONTENT9, CASEA, \
+    CASE_VALA, CASE_CONTENTA, CASEB, CASE_VALB, CASE_CONTENTB, CASEC, CASE_VALC, CASE_CONTENTC, \
+    CASED, CASE_VALD, CASE_CONTENTD, CASEE, CASE_VALE, CASE_CONTENTE, CASEF, CASE_VALF, \
+    CASE_CONTENTF, \
+    ...)                                                           \
+    GEPC_SWITCH_IMPL(                                                        \
+    VAR, CASE0, CASE_VAL0, CASE_CONTENT0, CASE1, CASE_VAL1, CASE_CONTENT1, CASE2, \
+    CASE_VAL2, CASE_CONTENT2, CASE3, CASE_VAL3, CASE_CONTENT3, CASE4, CASE_VAL4, CASE_CONTENT4, \
+    CASE5, CASE_VAL5, CASE_CONTENT5, CASE6, CASE_VAL6, CASE_CONTENT6, CASE7, CASE_VAL7, \
+    CASE_CONTENT7, CASE8, CASE_VAL8, CASE_CONTENT8, CASE9, CASE_VAL9, CASE_CONTENT9, CASEA, \
+    CASE_VALA, CASE_CONTENTA, CASEB, CASE_VALB, CASE_CONTENTB, CASEC, CASE_VALC, CASE_CONTENTC, \
+    CASED, CASE_VALD, CASE_CONTENTD, CASEE, CASE_VALE, CASE_CONTENTE, CASEF, CASE_VALF, \
+    CASE_CONTENTF)
+
+#define SWITCH(...) GEPC_SWITCH_TAKE(__VA_ARGS__,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,)
+#else
+/* Function-like, deliberately: several of these names appear as bare tokens
+ * in the DSL, and an object-like alias would expand them there and change
+ * what the ROM build sees. */
+#define SWITCH(                                                        VAR, CASE0, CASE_VAL0, CASE_CONTENT0, CASE1, CASE_VAL1, CASE_CONTENT1, CASE2, \
+    CASE_VAL2, CASE_CONTENT2, CASE3, CASE_VAL3, CASE_CONTENT3, CASE4, CASE_VAL4, CASE_CONTENT4, \
+    CASE5, CASE_VAL5, CASE_CONTENT5, CASE6, CASE_VAL6, CASE_CONTENT6, CASE7, CASE_VAL7, \
+    CASE_CONTENT7, CASE8, CASE_VAL8, CASE_CONTENT8, CASE9, CASE_VAL9, CASE_CONTENT9, CASEA, \
+    CASE_VALA, CASE_CONTENTA, CASEB, CASE_VALB, CASE_CONTENTB, CASEC, CASE_VALC, CASE_CONTENTC, \
+    CASED, CASE_VALD, CASE_CONTENTD, CASEE, CASE_VALE, CASE_CONTENTE, CASEF, CASE_VALF, \
+    CASE_CONTENTF)                                                         GEPC_SWITCH_IMPL(                                                            VAR, CASE0, CASE_VAL0, CASE_CONTENT0, CASE1, CASE_VAL1, CASE_CONTENT1, CASE2, \
+    CASE_VAL2, CASE_CONTENT2, CASE3, CASE_VAL3, CASE_CONTENT3, CASE4, CASE_VAL4, CASE_CONTENT4, \
+    CASE5, CASE_VAL5, CASE_CONTENT5, CASE6, CASE_VAL6, CASE_CONTENT6, CASE7, CASE_VAL7, \
+    CASE_CONTENT7, CASE8, CASE_VAL8, CASE_CONTENT8, CASE9, CASE_VAL9, CASE_CONTENT9, CASEA, \
+    CASE_VALA, CASE_CONTENTA, CASEB, CASE_VALB, CASE_CONTENTB, CASEC, CASE_VALC, CASE_CONTENTC, \
+    CASED, CASE_VALD, CASE_CONTENTD, CASEE, CASE_VALE, CASE_CONTENTE, CASEF, CASE_VALF, \
+    CASE_CONTENTF)
+#endif
 
  /**
    Simple AND Statement.

@@ -65,10 +65,12 @@ static void test_opcode_sign_extends(void)
 {
     /* Not static: a command holding a pointer cannot be a load-time constant
      * once the words are 32 bits wide, because narrowing an address is not an
-     * address constant in C. Nothing in the game builds a *static* display
-     * list containing a pointer, so this costs the port nothing -- but it is
-     * worth knowing, and it is why these tests build their lists on the
-     * stack. */
+     * address constant in C.
+     *
+     * The game does have one such list -- debugmenu.c builds a static Gfx[]
+     * around gsDPLoadTextureBlock(&g_DebugMenuTexture, ...) -- so this is a
+     * real constraint the port still owes an answer to, not a curiosity.
+     * These tests build their lists on the stack to stay clear of it. */
     const Gfx enddl[] = { gsSPEndDisplayList() };
     const Gfx vtx[]   = { gsSPVertex(g_vertices, 4, 0) };
 

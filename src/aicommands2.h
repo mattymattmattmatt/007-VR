@@ -67,8 +67,28 @@
   @return    Continue execution from LABEL or End
   @exception Does Not search from beginning
 *******************************************************************************/
-#define BREAK(LABEL)  \
+#define GEPC_BREAK_IMPL(LABEL)  \
                 GotoNext(LABEL)
+
+#ifdef GEPC
+/* Part of the AI-command DSL's C89 variadic emulation: the caller passes
+ * however many arguments it has and IS_EMPTY drops the rest. IDO allowed both
+ * too few and too many; C99 requires the declared count exactly. The body is
+ * unchanged and renamed, and this entry point pads a short call out to the
+ * declared arity while its variadic tail absorbs any surplus. */
+#define GEPC_BREAK_TAKE(                                          \
+    LABEL, \
+    ...)                                                           \
+    GEPC_BREAK_IMPL(                                                        \
+    LABEL)
+
+#define BREAK(...) GEPC_BREAK_TAKE(__VA_ARGS__,)
+#else
+/* Function-like, deliberately: several of these names appear as bare tokens
+ * in the DSL, and an object-like alias would expand them there and change
+ * what the ROM build sees. */
+#define BREAK(                                                        LABEL)                                                         GEPC_BREAK_IMPL(                                                            LABEL)
+#endif
 
 
 
@@ -527,9 +547,29 @@
   @return     Continue execution from LABEL if successful
   @exception: Bond needs to be at long distance away from guard to work
 *******************************************************************************/
-#define TRYFiringWalk(GOTOLABEL)  \
+#define GEPC_TRYFiringWalk_IMPL(GOTOLABEL)  \
                     AI_TRYFiringWalk  ,  \
                     GOTOLABEL ,
+
+#ifdef GEPC
+/* Part of the AI-command DSL's C89 variadic emulation: the caller passes
+ * however many arguments it has and IS_EMPTY drops the rest. IDO allowed both
+ * too few and too many; C99 requires the declared count exactly. The body is
+ * unchanged and renamed, and this entry point pads a short call out to the
+ * declared arity while its variadic tail absorbs any surplus. */
+#define GEPC_TRYFiringWalk_TAKE(                                          \
+    GOTOLABEL, \
+    ...)                                                           \
+    GEPC_TRYFiringWalk_IMPL(                                                        \
+    GOTOLABEL)
+
+#define TRYFiringWalk(...) GEPC_TRYFiringWalk_TAKE(__VA_ARGS__,)
+#else
+/* Function-like, deliberately: several of these names appear as bare tokens
+ * in the DSL, and an object-like alias would expand them there and change
+ * what the ROM build sees. */
+#define TRYFiringWalk(                                                        GOTOLABEL)                                                         GEPC_TRYFiringWalk_IMPL(                                                            GOTOLABEL)
+#endif
 
 #define AI_TRYFiringWalk_LENGTH   (AICMDSIZE +1    )
 
@@ -546,9 +586,29 @@
   @return     Continue execution from LABEL if successful
   @exception: Bond needs to be at long distance away from guard to work
 *******************************************************************************/
-#define TRYFiringRun(GOTOLABEL)  \
+#define GEPC_TRYFiringRun_IMPL(GOTOLABEL)  \
                     AI_TRYFiringRun  ,  \
                     GOTOLABEL ,
+
+#ifdef GEPC
+/* Part of the AI-command DSL's C89 variadic emulation: the caller passes
+ * however many arguments it has and IS_EMPTY drops the rest. IDO allowed both
+ * too few and too many; C99 requires the declared count exactly. The body is
+ * unchanged and renamed, and this entry point pads a short call out to the
+ * declared arity while its variadic tail absorbs any surplus. */
+#define GEPC_TRYFiringRun_TAKE(                                          \
+    GOTOLABEL, \
+    ...)                                                           \
+    GEPC_TRYFiringRun_IMPL(                                                        \
+    GOTOLABEL)
+
+#define TRYFiringRun(...) GEPC_TRYFiringRun_TAKE(__VA_ARGS__,)
+#else
+/* Function-like, deliberately: several of these names appear as bare tokens
+ * in the DSL, and an object-like alias would expand them there and change
+ * what the ROM build sees. */
+#define TRYFiringRun(                                                        GOTOLABEL)                                                         GEPC_TRYFiringRun_IMPL(                                                            GOTOLABEL)
+#endif
 
 #define AI_TRYFiringRun_LENGTH   (AICMDSIZE +1    )
 
@@ -565,9 +625,29 @@
   @return     Continue execution from LABEL if successful
   @exception: Bond cannot be too close to guard or it will not work
 *******************************************************************************/
-#define TRYFiringRoll(GOTOLABEL)  \
+#define GEPC_TRYFiringRoll_IMPL(GOTOLABEL)  \
                     AI_TRYFiringRoll  ,  \
                     GOTOLABEL ,
+
+#ifdef GEPC
+/* Part of the AI-command DSL's C89 variadic emulation: the caller passes
+ * however many arguments it has and IS_EMPTY drops the rest. IDO allowed both
+ * too few and too many; C99 requires the declared count exactly. The body is
+ * unchanged and renamed, and this entry point pads a short call out to the
+ * declared arity while its variadic tail absorbs any surplus. */
+#define GEPC_TRYFiringRoll_TAKE(                                          \
+    GOTOLABEL, \
+    ...)                                                           \
+    GEPC_TRYFiringRoll_IMPL(                                                        \
+    GOTOLABEL)
+
+#define TRYFiringRoll(...) GEPC_TRYFiringRoll_TAKE(__VA_ARGS__,)
+#else
+/* Function-like, deliberately: several of these names appear as bare tokens
+ * in the DSL, and an object-like alias would expand them there and change
+ * what the ROM build sees. */
+#define TRYFiringRoll(                                                        GOTOLABEL)                                                         GEPC_TRYFiringRoll_IMPL(                                                            GOTOLABEL)
+#endif
 
 #define AI_TRYFiringRoll_LENGTH   (AICMDSIZE +1    )
 
@@ -628,8 +708,28 @@
   @return     Continue execution from LABEL if successful
   @param      TARGET: 16bit ID
 *******************************************************************************/
-#define TRYFireAtBond(GOTOLABEL)  \
+#define GEPC_TRYFireAtBond_IMPL(GOTOLABEL)  \
                 TRYFireOrAimAtTarget(TARGET_BOND, 0, GOTOLABEL)
+
+#ifdef GEPC
+/* Part of the AI-command DSL's C89 variadic emulation: the caller passes
+ * however many arguments it has and IS_EMPTY drops the rest. IDO allowed both
+ * too few and too many; C99 requires the declared count exactly. The body is
+ * unchanged and renamed, and this entry point pads a short call out to the
+ * declared arity while its variadic tail absorbs any surplus. */
+#define GEPC_TRYFireAtBond_TAKE(                                          \
+    GOTOLABEL, \
+    ...)                                                           \
+    GEPC_TRYFireAtBond_IMPL(                                                        \
+    GOTOLABEL)
+
+#define TRYFireAtBond(...) GEPC_TRYFireAtBond_TAKE(__VA_ARGS__,)
+#else
+/* Function-like, deliberately: several of these names appear as bare tokens
+ * in the DSL, and an object-like alias would expand them there and change
+ * what the ROM build sees. */
+#define TRYFireAtBond(                                                        GOTOLABEL)                                                         GEPC_TRYFireAtBond_IMPL(                                                            GOTOLABEL)
+#endif
 
 
 
@@ -700,8 +800,28 @@
   @return     Continue execution from LABEL if successful
   @param      TARGET: 16bit ID
 *******************************************************************************/
-#define TRYFireAtBondKneeling(GOTOLABEL)  \
+#define GEPC_TRYFireAtBondKneeling_IMPL(GOTOLABEL)  \
                 TRYFireOrAimAtTargetKneel(TARGET_BOND, 0, GOTOLABEL)
+
+#ifdef GEPC
+/* Part of the AI-command DSL's C89 variadic emulation: the caller passes
+ * however many arguments it has and IS_EMPTY drops the rest. IDO allowed both
+ * too few and too many; C99 requires the declared count exactly. The body is
+ * unchanged and renamed, and this entry point pads a short call out to the
+ * declared arity while its variadic tail absorbs any surplus. */
+#define GEPC_TRYFireAtBondKneeling_TAKE(                                          \
+    GOTOLABEL, \
+    ...)                                                           \
+    GEPC_TRYFireAtBondKneeling_IMPL(                                                        \
+    GOTOLABEL)
+
+#define TRYFireAtBondKneeling(...) GEPC_TRYFireAtBondKneeling_TAKE(__VA_ARGS__,)
+#else
+/* Function-like, deliberately: several of these names appear as bare tokens
+ * in the DSL, and an object-like alias would expand them there and change
+ * what the ROM build sees. */
+#define TRYFireAtBondKneeling(                                                        GOTOLABEL)                                                         GEPC_TRYFireAtBondKneeling_IMPL(                                                            GOTOLABEL)
+#endif
 
 
 
