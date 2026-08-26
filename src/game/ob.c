@@ -381,7 +381,7 @@ void obBlankResourcesInBank5(void) {
 
 
 
-s32 fileGetIndex(u8 *resname)
+s32 fileGetIndex(char *resname)
 {
     s32 i;
     s32 stack;

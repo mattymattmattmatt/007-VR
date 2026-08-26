@@ -258,20 +258,36 @@ typedef union
             f32 f[3];
         };
     } coord3d;
-#define New_Coord3d(x, y, z)            \
-    {                                   \
-        IF_ELSE(IS_EMPTY(x))            \
-        (0)(x),                         \
-            IF_ELSE(IS_EMPTY(y))(0)(y), \
-            IF_ELSE(IS_EMPTY(z))(0)(z)  \
+/* Both of these already default an omitted component to zero through
+ * IS_EMPTY, which is the whole point of the CPPLib machinery. What they could
+ * not survive is being *called* with fewer arguments than they declare --
+ * chrai.c writes New_Vector() with none at all. IDO allowed that; C99 requires
+ * the counts to match, and GCC stops at "requires 3 arguments, but only 1
+ * given" before IS_EMPTY ever runs.
+ *
+ * So for the PC build the arguments are taken variadically and padded out to
+ * three before reaching the same expansion. The body is shared, so both forms
+ * produce identical tokens and a call that does pass three arguments is
+ * unaffected. */
+#define GEPC_XYZ_BODY(x, y, z)      \
+    {                               \
+        IF_ELSE(IS_EMPTY(x))(0)(x), \
+        IF_ELSE(IS_EMPTY(y))(0)(y), \
+        IF_ELSE(IS_EMPTY(z))(0)(z)  \
     }
+#ifdef GEPC
+#    define GEPC_PAD3(...)  GEPC_PAD3_(__VA_ARGS__, , , )
+#    define GEPC_PAD3_(x, y, z, ...) GEPC_XYZ_BODY(x, y, z)
+#    define New_Coord3d(...) GEPC_PAD3(__VA_ARGS__)
+#else
+#    define New_Coord3d(x, y, z) GEPC_XYZ_BODY(x, y, z)
+#endif
     typedef coord3d vec3d; //canononical name
-#define New_Vector(x, y, z)        \
-    {                              \
-        IF_ELSE(IS_EMPTY(x))(0)(x),\
-        IF_ELSE(IS_EMPTY(y))(0)(y),\
-        IF_ELSE(IS_EMPTY(z))(0)(z) \
-    }
+#ifdef GEPC
+#    define New_Vector(...) GEPC_PAD3(__VA_ARGS__)
+#else
+#    define New_Vector(x, y, z) GEPC_XYZ_BODY(x, y, z)
+#endif
 
     /**
      16bit Co-Ordinate used for Integer co-ordinates eg, pumping straight to RSP.

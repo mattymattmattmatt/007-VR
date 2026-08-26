@@ -1,4 +1,11 @@
 #include <ultra64.h>
+#ifdef GEPC
+/* Only for the rename the header applies: these two collide with glibc's
+ * acos/asin, which the PC build has in scope and the N64 build does not. See
+ * the comment in math_asinacos.h. Guarded so the ROM build's token stream is
+ * untouched. */
+#    include "math_asinacos.h"
+#endif
 
 //data 
 //D:80032320

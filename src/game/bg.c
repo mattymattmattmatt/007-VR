@@ -5128,7 +5128,13 @@ s32 bgGetPortalBetweenRooms(s32 room1, s32 room2, coord3d *arg2, coord3d *arg3)
     s32 portalIndex = -1;
 
     #ifndef DEBUG
-        #define osSyncPrintf(x)
+        /* The call sites below pass three arguments. A one-parameter no-op
+         * only worked because IDO did not check; C99 does. */
+        #ifdef GEPC
+            #define osSyncPrintf(...)
+        #else
+            #define osSyncPrintf(x)
+        #endif
     #endif
 
     for (i = 0; g_BgPortals[i].offset_portal != NULL; i++)
