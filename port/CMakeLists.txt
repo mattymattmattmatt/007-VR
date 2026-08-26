@@ -54,6 +54,7 @@ add_library(ge007_platform STATIC
     src/audio.c
     src/audio_abi.c
     src/obseg.c
+    src/game_random.c
     ${GEPC_ROM_MANIFEST}
 )
 
@@ -215,6 +216,11 @@ if(GEPC_BUILD_TESTS)
     target_link_libraries(ge007_rdram_tests PRIVATE ge007_platform)
     add_test(NAME ge007_rdram COMMAND ge007_rdram_tests)
     set_tests_properties(ge007_rdram PROPERTIES TIMEOUT 60)
+
+    add_executable(ge007_random_tests tests/test_game_random.c)
+    target_link_libraries(ge007_random_tests PRIVATE ge007_platform)
+    add_test(NAME ge007_game_random COMMAND ge007_random_tests)
+    set_tests_properties(ge007_game_random PROPERTIES TIMEOUT 60)
 
     add_executable(ge007_rdp_tests tests/test_gfx_rdp.c)
     target_link_libraries(ge007_rdp_tests PRIVATE ge007_platform)

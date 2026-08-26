@@ -403,3 +403,11 @@ s32 osPfsInit(OSMesgQueue *mq, OSPfs *pfs, int channel)
     /* No controller pak. The game falls back to EEPROM saves. */
     return PFS_ERR_NOPACK;
 }
+
+/* --------------------------------------------------------- libm constant */
+
+/*
+ * src/libultra/gu/cosf.c returns this for an out-of-range argument. On IDO it
+ * came from libm; here it is just the quiet NaN it names.
+ */
+float __libm_qnan_f = (float)(0.0 / 0.0);
