@@ -351,13 +351,46 @@ Implemented exactly and tested against hand-computed values: buffer clears,
 DMEM moves, DMA in and out, mixing, interleave, the big-endian DMEM layout,
 and ADPCM nibble extraction, sign handling, scaling and clamping.
 
-**Approximated, and audibly so:** the resampler uses linear interpolation
-rather than the hardware's filter, and the envelope mixer uses a straight
-linear ramp rather than the per-sample rate registers. Pitch-shifted voices
-and volume ramps will be close but not sample-accurate. This is a stated
-limitation, not a placeholder — it is the first place to look if the audio
-sounds subtly wrong, and it wants checking against real output before anyone
-calls the audio finished.
+Every command the game can emit is now handled. The list is short and worth
+checking against: `grep -o 'a[A-Z][A-Za-z]*(ptr' src/libultra/audio/*.c
+src/libultrare/audio/*.c | sort -u` names fourteen builders, and there is a
+case for each.
+
+The three commands that carry state — resample, envelope mix and the reverb's
+pole filter — were the interesting ones, and in each case the game's own
+source settles what the microcode does rather than leaving it to guesswork:
+
+- **Envelope mixer.** `_getRate` and `_getVol` in
+  `src/libultrare/audio/env.c` are the SDK's model of the hardware. The
+  telling detail is the `0.125` in `ivol += (rate * samples) * 0.125`: the
+  rate is a signed 16.16 value added to the volume once per *block of eight
+  samples*, so the envelope is a staircase, not a slope. The other half is the
+  state block — `_pullSubFrame` sends the volume registers once at `A_INIT`
+  and never again, so a continue frame has to recover volume, target, rate and
+  the dry/wet sends from its own state or it mixes at whatever the last voice
+  in the list happened to set.
+- **Pole filter.** `init_lpfilter` in `src/libultrare/audio/drvrNew.c` writes
+  eight zeros, then `fc` and its powers up to `fc^8`, and sets the command's
+  gain to `SCALE - fc` with `SCALE` of 16384. A table of consecutive powers of
+  one coefficient is what you build to unroll `y[n] = (fgain * x[n] + fc *
+  y[n-1]) >> 14` across eight lanes; on a CPU the recurrence is just the
+  recurrence, and `fgain = SCALE - fc` giving unity gain at DC is the check
+  that the shift is 14 rather than 15.
+- **Resampler.** Carries the fractional read position and the sample either
+  side of a buffer boundary, so pitched voices are continuous across frames.
+  The test for this asserts that splitting a run in two changes nothing:
+  sixteen outputs from one call must equal two calls of eight with the input
+  refilled, sample for sample.
+
+**The one remaining approximation:** the resampler's interpolation kernel. The
+hardware's 64-phase filter coefficient table is not in this repository, and a
+table reproduced from memory would be both hard to hear and impossible to
+attribute, so this uses a four-point Catmull-Rom spline instead. That is the
+right shape for a four-tap interpolator and reproduces a straight line
+exactly, but it is not the same filter: pitched voices will differ from
+hardware in their high-frequency detail. It is the first place to look if the
+audio sounds subtly wrong, and it wants checking against real output before
+anyone calls the audio finished.
 
 One bug worth recording, found by the compiler rather than by a test: the
 ADPCM decoder shifted sign-extended nibbles left, and left-shifting a negative

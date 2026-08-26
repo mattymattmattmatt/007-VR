@@ -9,12 +9,25 @@
  *
  * Scope, stated honestly. The commands that are exact integer operations --
  * buffer clears, moves, DMA, mixing, interleave and ADPCM decode -- are
- * implemented properly and tested against hand-computed values. The resampler
- * and the envelope mixer are approximations: the hardware's exact filter
- * coefficients and ramp behaviour are not reproduced here, so pitch-shifted
- * voices and volume ramps will be close rather than sample-accurate. That is a
- * real limitation, not a placeholder, and it wants checking against real
- * output before anyone calls the audio finished.
+ * implemented properly and tested against hand-computed values.
+ *
+ * The envelope mixer is exact. Its ramp is not guesswork: _getRate and _getVol
+ * in src/libultrare/audio/env.c are the game's own model of what the microcode
+ * does with the rate registers, and audio_abi.c does the same arithmetic --
+ * a signed 16.16 step added to the volume once per block of eight samples.
+ * It carries its state across frames, which it has to, because env.c sends the
+ * volume registers once at A_INIT and never again.
+ *
+ * The resampler is exact in everything except the interpolation kernel. It
+ * carries the fractional read position and the sample either side of a buffer
+ * boundary, so a pitched voice is continuous across frames. What it does not
+ * have is the hardware's 64-phase filter coefficient table, which is not in
+ * this repository; it uses a four-point Catmull-Rom spline instead. That is
+ * the right shape for a four-tap interpolator and reproduces a straight line
+ * exactly, but it is not the same filter, so pitched voices will differ from
+ * hardware in their high-frequency detail. That is the one remaining
+ * approximation in this file, and it is the place to look if pitched voices
+ * ever sound subtly wrong.
  */
 #ifndef GEPC_AUDIO_ABI_H
 #define GEPC_AUDIO_ABI_H
