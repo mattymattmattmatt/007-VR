@@ -14,6 +14,7 @@
  */
 #include "platform.h"
 #include "rdram.h"
+#include "obseg.h"
 #include "romdata.h"
 #include "video.h"
 
@@ -83,6 +84,16 @@ int main(int argc, char **argv)
     platformLog("rom: %s (%u MB), sha1 %s",
                 romdataGetVersionName(), romdataGetSize() / (1024u * 1024u),
                 romdataGetSha1());
+
+    /*
+     * The game's file table has to know where its files live in the ROM
+     * before anything asks for one. On the console the linker did this; here
+     * it happens now, once the ROM is open and before the game starts.
+     */
+    if (gepcObsegBindFileTable() < 0) {
+        fprintf(stderr, "ge007: could not bind the file table to the ROM.\n");
+        return 3;
+    }
 
     /* From here the game is in charge. init() starts the main thread and
      * returns; the window opens when the game asks for a video manager. */

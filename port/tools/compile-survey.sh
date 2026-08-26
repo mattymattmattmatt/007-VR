@@ -45,7 +45,8 @@ find src -name '*.c' \
     ! -path 'src/libultra/os/*' \
     ! -path 'src/libultra/io/*' \
     ! -path 'src/libultra/libc/string.c' \
-    ! -path 'src/libultrare/*' \
+    ! -path 'src/libultrare/os/*' \
+    ! -path 'src/libultrare/io/*' \
     | sort > "$tmp/files"
 total=$(wc -l < "$tmp/files")
 

@@ -24,6 +24,22 @@ set(GEPC_REPO_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
 find_package(Threads REQUIRED)
 
+# The ROM layout table, generated from the repository's own extraction
+# manifest. scripts/filelist.u.csv records where each file begins in the ROM
+# and how long it is -- layout, not content -- which is what the port needs to
+# give the game's file table its addresses. See port/include/obseg.h.
+set(GEPC_ROM_MANIFEST "${CMAKE_CURRENT_BINARY_DIR}/generated/gepc_rom_files.c")
+add_custom_command(
+    OUTPUT  "${GEPC_ROM_MANIFEST}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory
+            "${CMAKE_CURRENT_BINARY_DIR}/generated"
+    COMMAND python3 "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_rom_manifest.py"
+            "${GEPC_REPO_ROOT}/scripts/filelist.u.csv" "${GEPC_ROM_MANIFEST}"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_rom_manifest.py"
+            "${GEPC_REPO_ROOT}/scripts/filelist.u.csv"
+    COMMENT "Generating the ROM file manifest"
+    VERBATIM)
+
 add_library(ge007_platform STATIC
     src/system.c
     src/libultra.c
@@ -37,6 +53,8 @@ add_library(ge007_platform STATIC
     src/gfx_texture.c
     src/audio.c
     src/audio_abi.c
+    src/obseg.c
+    ${GEPC_ROM_MANIFEST}
 )
 
 # port/include must come FIRST: it carries the strings.h shim that keeps
@@ -228,15 +246,20 @@ endif()
 # entry point at all.
 #
 # The exclusions match the survey's exactly. src/libultra/os, src/libultra/io
-# and src/libultrare are the N64 hardware layers that port/src/libultra.c
-# replaces; src/libultra/libc/string.c defines strchr, strlen and memcpy over
+# and the matching src/libultrare directories are the N64 hardware layers that
+# port/src/libultra.c replaces. Only os/ and io/ though -- libultrare/audio and
+# libultrare/libc are ordinary library code the game calls (the synthesis
+# driver and _Printf), and excluding the whole tree, as this first did, loses
+# them. Same mistake as excluding libultra/gu and libultra/audio would be.
+# src/libultra/libc/string.c defines strchr, strlen and memcpy over
 # `const unsigned char *`, which on a hosted build are glibc's. Keep this list
 # and the survey's in step -- they are measuring the same thing.
 file(GLOB_RECURSE GEPC_GAME_SOURCES CONFIGURE_DEPENDS
      "${GEPC_REPO_ROOT}/src/*.c")
 list(FILTER GEPC_GAME_SOURCES EXCLUDE REGEX "/src/libultra/os/")
 list(FILTER GEPC_GAME_SOURCES EXCLUDE REGEX "/src/libultra/io/")
-list(FILTER GEPC_GAME_SOURCES EXCLUDE REGEX "/src/libultrare/")
+list(FILTER GEPC_GAME_SOURCES EXCLUDE REGEX "/src/libultrare/os/")
+list(FILTER GEPC_GAME_SOURCES EXCLUDE REGEX "/src/libultrare/io/")
 list(FILTER GEPC_GAME_SOURCES EXCLUDE REGEX "/src/libultra/libc/string\\.c$")
 
 # The Makefile splits the assets in two, and so does this.

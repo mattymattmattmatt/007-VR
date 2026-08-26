@@ -61,4 +61,50 @@
 #define M_U32_MAX_VALUE_F 4294967296.0f
 #endif
 
+
+/* The repository's own include/math.h carries these, but the PC build resolves
+ * <math.h> to glibc's -- deliberately, since the repository's include/ comes
+ * after the system directories. Without them the game's uses look like calls
+ * to functions nobody defines, and the failure surfaces at link time as
+ * "undefined reference to SQR", which is a long way from the cause.
+ * Guarded individually so a build that does see the repository header is
+ * unaffected. */
+#ifndef SQR
+#  define SQR(x)    ((x) * (x))
+#endif
+#ifndef ABS
+#  define ABS(x)    ((x) < 0 ? -(x) : (x))
+#endif
+#ifndef SGN
+#  define SGN(x)    ((x) < 0 ? -1 : (x) > 0 ? 1 : 0)
+#endif
+#ifndef MIN
+#  define MIN(x, y) ((x) < (y) ? (x) : (y))
+#endif
+#ifndef MAX
+#  define MAX(x, y) ((x) > (y) ? (x) : (y))
+#endif
+#ifndef DegToRad
+#  define DegToRad(DEG)      (float)((DEG) * M_TAU_F / 360.0f)
+#endif
+#ifndef DegToRad1Fact
+/* One multiply rather than two, which is why the game has both. */
+#  define DegToRad1Fact(DEG) (float)((DEG) * (float)(M_TAU / 360.0))
+#endif
+#ifndef RadToDeg
+#  define RadToDeg(RAD)      (float)((RAD) * (360.0f / M_TAU_F))
+#endif
+#ifndef mDegToHalfRad
+#  define mDegToHalfRad(x)   ((x * M_PI_F) / 360.0f)
+#endif
+#ifndef DEG2BYTE
+#  define DEG2BYTE(DEG)      (char)(256.0f / 360.0f * (DEG))
+#endif
+#ifndef RAD2BYTE
+#  define RAD2BYTE(RAD)      (char)(256.0f / M_TAU_F * (RAD))
+#endif
+#ifndef ByteToRadian
+#  define ByteToRadian(Byte) ((Byte * M_TAU_F) * (1.0f / 256.0f))
+#endif
+
 #endif /* GEPC_PRELUDE_H */
