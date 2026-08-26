@@ -4,6 +4,7 @@
  * exports GL 1.1, so anything newer has to come from wglGetProcAddress anyway.
  */
 #include "gfx_gl.h"
+#include "gfx_rdp.h"
 #include "gfx_texture.h"
 #include "platform.h"
 
@@ -60,6 +61,11 @@ typedef ptrdiff_t GLsizeiptr;
 #define GL_MIRRORED_REPEAT        0x8370
 #define GL_SCISSOR_TEST           0x0C11
 #define GL_UNPACK_ALIGNMENT       0x0CF5
+#define GL_ZERO                   0
+#define GL_ONE                    1
+#define GL_DST_ALPHA              0x0304
+#define GL_LEQUAL                 0x0203
+#define GL_POLYGON_OFFSET_FILL    0x8037
 
 #define GL_FUNCS(X)                                                           \
     X(void,   glViewport,        (GLint, GLint, GLsizei, GLsizei))            \
@@ -69,6 +75,9 @@ typedef ptrdiff_t GLsizeiptr;
     X(void,   glEnable,          (GLenum))                                    \
     X(void,   glDisable,         (GLenum))                                    \
     X(void,   glBlendFunc,       (GLenum, GLenum))                            \
+    X(void,   glDepthMask,       (GLboolean))                              \
+    X(void,   glDepthFunc,       (GLenum))                                 \
+    X(void,   glPolygonOffset,   (GLfloat, GLfloat))                       \
     X(void,   glDrawArrays,      (GLenum, GLint, GLsizei))                    \
     X(void,   glActiveTexture,   (GLenum))                                    \
     X(void,   glBindTexture,     (GLenum, GLuint))                            \
@@ -94,6 +103,8 @@ typedef ptrdiff_t GLsizeiptr;
     X(void,   glUseProgram,      (GLuint))                                    \
     X(GLint,  glGetUniformLocation,(GLuint, const GLchar *))                  \
     X(void,   glUniform1i,       (GLint, GLint))                              \
+    X(void,   glUniform1f,       (GLint, GLfloat))                         \
+    X(void,   glUniform4i,       (GLint, GLint, GLint, GLint, GLint))      \
     X(void,   glUniform2f,       (GLint, GLfloat, GLfloat))                   \
     X(void,   glUniform4f,       (GLint, GLfloat, GLfloat, GLfloat, GLfloat)) \
     X(void,   glGenVertexArrays, (GLsizei, GLuint *))                         \
@@ -145,6 +156,8 @@ typedef struct gl_backend {
 
     GLuint prog, vao, vbo;
     GLint  u_tex, u_texsize, u_texscale, u_textured, u_prim, u_env;
+    GLint  u_cc_c0, u_cc_a0, u_cc_c1, u_cc_a1, u_two_cycle;
+    GLint  u_prim_lod, u_alpha_test, u_alpha_ref;
 
     batch_vertex batch[BATCH_VERTS];
     unsigned     batch_count;
@@ -165,7 +178,16 @@ typedef struct gl_backend {
     int   bound_w, bound_h;
 
     unsigned geometry_mode;
-    unsigned char prim[4], env[4];
+    unsigned char prim[4], env[4], fog[4];
+    unsigned fill_color;
+    float    prim_lod;
+
+    gfx_combiner   cc;
+    gfx_rendermode rm;
+
+    /* Framebuffer the game thinks it is drawing to, and the window it
+     * actually lands in. */
+    int fb_w, fb_h, out_w, out_h;
 
     unsigned draw_calls;
 } gl_backend;
@@ -188,20 +210,92 @@ static const char *k_vs =
     "    gl_Position = a_pos;\n"
     "}\n";
 
+/*
+ * The colour combiner, evaluated per fragment.
+ *
+ * The RDP computes (a - b) * c + d, twice over, for colour and alpha
+ * separately, with each operand chosen from a small set. gfx_rdp.c resolves
+ * the raw mux -- whose meaning depends on which slot it sits in -- into the
+ * unambiguous operand numbers this switches on, so the numbering here has to
+ * stay in step with gfx_cc_operand.
+ *
+ * Passing the selectors as uniforms rather than compiling a shader per
+ * combiner keeps this to a single program. The branches are uniform-controlled
+ * so they cost almost nothing, and the geometry counts here are from 1997.
+ */
 static const char *k_fs =
     "#version 330 core\n"
     "in vec2 v_uv;\n"
     "in vec4 v_color;\n"
     "uniform sampler2D u_tex;\n"
-    "uniform int u_textured;\n"
-    "uniform vec4 u_prim;\n"
-    "uniform vec4 u_env;\n"
+    "uniform int   u_textured;\n"
+    "uniform ivec4 u_cc_c0;\n"
+    "uniform ivec4 u_cc_a0;\n"
+    "uniform ivec4 u_cc_c1;\n"
+    "uniform ivec4 u_cc_a1;\n"
+    "uniform int   u_two_cycle;\n"
+    "uniform vec4  u_prim;\n"
+    "uniform vec4  u_env;\n"
+    "uniform float u_prim_lod;\n"
+    "uniform int   u_alpha_test;\n"
+    "uniform float u_alpha_ref;\n"
     "out vec4 frag;\n"
+    "vec4 g_tex0;\n"
+    "vec4 g_tex1;\n"
+    "vec4 g_comb;\n"
+    "vec3 cc_rgb(int s) {\n"
+    "    if (s ==  0) return g_comb.rgb;\n"
+    "    if (s ==  1) return g_tex0.rgb;\n"
+    "    if (s ==  2) return g_tex1.rgb;\n"
+    "    if (s ==  3) return u_prim.rgb;\n"
+    "    if (s ==  4) return v_color.rgb;\n"
+    "    if (s ==  5) return u_env.rgb;\n"
+    "    if (s ==  6) return vec3(0.5);\n"
+    "    if (s ==  7) return vec3(1.0);\n"
+    "    if (s ==  8) return vec3(g_comb.a);\n"
+    "    if (s ==  9) return vec3(g_tex0.a);\n"
+    "    if (s == 10) return vec3(g_tex1.a);\n"
+    "    if (s == 11) return vec3(u_prim.a);\n"
+    "    if (s == 12) return vec3(v_color.a);\n"
+    "    if (s == 13) return vec3(u_env.a);\n"
+    "    if (s == 14) return vec3(0.0);\n"
+    "    if (s == 15) return vec3(u_prim_lod);\n"
+    "    if (s == 16) return vec3(0.5);\n"
+    "    if (s == 17) return vec3(0.0);\n"
+    "    if (s == 18) return vec3(0.0);\n"
+    "    if (s == 19) return vec3(1.0);\n"
+    "    return vec3(0.0);\n"
+    "}\n"
+    "float cc_a(int s) {\n"
+    "    if (s ==  8) return g_comb.a;\n"
+    "    if (s ==  9) return g_tex0.a;\n"
+    "    if (s == 10) return g_tex1.a;\n"
+    "    if (s == 11) return u_prim.a;\n"
+    "    if (s == 12) return v_color.a;\n"
+    "    if (s == 13) return u_env.a;\n"
+    "    if (s == 14) return 0.0;\n"
+    "    if (s == 15) return u_prim_lod;\n"
+    "    if (s == 19) return 1.0;\n"
+    "    return 0.0;\n"
+    "}\n"
     "void main() {\n"
-    "    vec4 c = v_color;\n"
-    "    if (u_textured != 0) { c *= texture(u_tex, v_uv); }\n"
-    "    if (c.a < 0.01) { discard; }\n"
-    "    frag = c;\n"
+    "    g_tex0 = (u_textured != 0) ? texture(u_tex, v_uv) : vec4(1.0);\n"
+    "    g_tex1 = g_tex0;\n"
+    "    g_comb = vec4(0.0);\n"
+    "    vec3  c = (cc_rgb(u_cc_c0.x) - cc_rgb(u_cc_c0.y))\n"
+    "            * cc_rgb(u_cc_c0.z) + cc_rgb(u_cc_c0.w);\n"
+    "    float a = (cc_a(u_cc_a0.x) - cc_a(u_cc_a0.y))\n"
+    "            * cc_a(u_cc_a0.z) + cc_a(u_cc_a0.w);\n"
+    "    g_comb = vec4(c, a);\n"
+    "    if (u_two_cycle != 0) {\n"
+    "        c = (cc_rgb(u_cc_c1.x) - cc_rgb(u_cc_c1.y))\n"
+    "          * cc_rgb(u_cc_c1.z) + cc_rgb(u_cc_c1.w);\n"
+    "        a = (cc_a(u_cc_a1.x) - cc_a(u_cc_a1.y))\n"
+    "          * cc_a(u_cc_a1.z) + cc_a(u_cc_a1.w);\n"
+    "    }\n"
+    "    if (u_alpha_test == 1 && a < u_alpha_ref) { discard; }\n"
+    "    if (u_alpha_test == 2 && a < 0.125) { discard; }\n"
+    "    frag = vec4(clamp(c, 0.0, 1.0), clamp(a, 0.0, 1.0));\n"
     "}\n";
 
 static GLuint compile(GLenum stage, const char *src)
@@ -290,6 +384,114 @@ static GLuint upload_texture(gl_backend *b, const void *src, int fmt, int siz,
 
 /* --------------------------------------------------------------- batch */
 
+/*
+ * Turn the decoded render mode into GL state. Called from flush, so the state
+ * that applies is always the state in force when the batch was built.
+ */
+static GLenum blend_factor(int f)
+{
+    switch (f) {
+    case GFX_BLEND_ZERO:                 return GL_ZERO;
+    case GFX_BLEND_ONE:                  return GL_ONE;
+    case GFX_BLEND_SRC_ALPHA:            return GL_SRC_ALPHA;
+    case GFX_BLEND_ONE_MINUS_SRC_ALPHA:  return GL_ONE_MINUS_SRC_ALPHA;
+    case GFX_BLEND_DST_ALPHA:            return GL_DST_ALPHA;
+    default:                             return GL_ONE;
+    }
+}
+
+/*
+ * Filtering and wrapping belong to the *tile*, not the texture, so they are
+ * set when the texture is bound rather than when it is uploaded. The same
+ * image is routinely used clamped in one place and wrapped in another, and
+ * baking either choice into the cached object gets one of them wrong.
+ */
+static GLenum wrap_mode(int cm)
+{
+    if (cm & G_TX_CLAMP) {
+        return GL_CLAMP_TO_EDGE;
+    }
+    return (cm & G_TX_MIRROR) ? GL_MIRRORED_REPEAT : GL_REPEAT;
+}
+
+/*
+ * Maps a rectangle from the game's framebuffer coordinates into the window,
+ * flipping y on the way: the N64 measures from the top edge and GL from the
+ * bottom.
+ */
+static void map_rect(const gl_backend *b, int x, int y, int w, int h,
+                     GLint *ox, GLint *oy, GLsizei *ow, GLsizei *oh)
+{
+    float sx = (b->fb_w > 0) ? (float)b->out_w / (float)b->fb_w : 1.0f;
+    float sy = (b->fb_h > 0) ? (float)b->out_h / (float)b->fb_h : 1.0f;
+    int flipped = (b->fb_h > 0) ? (b->fb_h - (y + h)) : y;
+
+    *ox = (GLint)(x * sx + 0.5f);
+    *oy = (GLint)(flipped * sy + 0.5f);
+    *ow = (GLsizei)(w * sx + 0.5f);
+    *oh = (GLsizei)(h * sy + 0.5f);
+}
+
+static void apply_texture_params(gl_backend *b)
+{
+    const tile_state *t;
+    GLenum filter;
+
+    if (!b->bound_tex) {
+        return;
+    }
+    t = &b->tiles[(b->current_tile >= 0 && b->current_tile <= 7)
+                  ? b->current_tile : 0];
+
+    /* G_TF_POINT is 0 and G_TF_BILERP is 2 once shifted down. Point sampling
+     * is what the console did for most surfaces and what the art was drawn
+     * for; honouring the game's choice rather than forcing either. */
+    filter = (b->rm.tex_filter == (G_TF_BILERP >> G_MDSFT_TEXTFILT))
+                 ? GL_LINEAR : GL_NEAREST;
+
+    p_glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, (GLint)filter);
+    p_glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, (GLint)filter);
+    p_glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, (GLint)wrap_mode(t->cms));
+    p_glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, (GLint)wrap_mode(t->cmt));
+}
+
+static void apply_rendermode(gl_backend *b)
+{
+    const gfx_rendermode *rm = &b->rm;
+
+    /* Depth testing is the intersection of two things: the geometry mode's
+     * G_ZBUFFER and the render mode's Z_CMP. The game turns the first off for
+     * the HUD and the second off for sky and muzzle flashes. */
+    if (rm->z_compare && (b->geometry_mode & (unsigned)G_ZBUFFER)) {
+        p_glEnable(GL_DEPTH_TEST);
+        p_glDepthFunc(GL_LEQUAL);
+    } else {
+        p_glDisable(GL_DEPTH_TEST);
+    }
+
+    /* Writing depth is separate from testing it, and getting this wrong is
+     * very visible: a translucent surface that writes depth hides everything
+     * drawn behind it afterwards. */
+    p_glDepthMask(rm->z_update ? GL_TRUE : GL_FALSE);
+
+    /* ZMODE_DEC is the RDP's decal mode -- coplanar geometry such as bullet
+     * holes and floor markings, which would otherwise z-fight with the
+     * surface they sit on. A small depth offset is the standard equivalent. */
+    if (rm->z_mode == 3) {
+        p_glEnable(GL_POLYGON_OFFSET_FILL);
+        p_glPolygonOffset(-1.0f, -1.0f);
+    } else {
+        p_glDisable(GL_POLYGON_OFFSET_FILL);
+    }
+
+    if (rm->blend_enabled) {
+        p_glEnable(GL_BLEND);
+        p_glBlendFunc(blend_factor(rm->src_factor), blend_factor(rm->dst_factor));
+    } else {
+        p_glDisable(GL_BLEND);
+    }
+}
+
 static void flush(gl_backend *b)
 {
     if (!b->batch_count) {
@@ -312,8 +514,30 @@ static void flush(gl_backend *b)
     p_glUniform4f(b->u_env, b->env[0] / 255.0f, b->env[1] / 255.0f,
                   b->env[2] / 255.0f, b->env[3] / 255.0f);
 
+    p_glUniform4i(b->u_cc_c0, b->cc.color[0][0], b->cc.color[0][1],
+                  b->cc.color[0][2], b->cc.color[0][3]);
+    p_glUniform4i(b->u_cc_a0, b->cc.alpha[0][0], b->cc.alpha[0][1],
+                  b->cc.alpha[0][2], b->cc.alpha[0][3]);
+    p_glUniform4i(b->u_cc_c1, b->cc.color[1][0], b->cc.color[1][1],
+                  b->cc.color[1][2], b->cc.color[1][3]);
+    p_glUniform4i(b->u_cc_a1, b->cc.alpha[1][0], b->cc.alpha[1][1],
+                  b->cc.alpha[1][2], b->cc.alpha[1][3]);
+    p_glUniform1i(b->u_two_cycle, b->rm.cycle_type == 1 ? 1 : 0);
+    p_glUniform1f(b->u_prim_lod, b->prim_lod);
+
+    /* CVG_X_ALPHA is how the game cuts out foliage and chain-link fences:
+     * coverage is multiplied by alpha, so a nearly transparent texel drops
+     * out entirely. Without coverage to multiply, a cutout is the honest
+     * equivalent. A threshold compare is the explicit form of the same idea. */
+    p_glUniform1i(b->u_alpha_test,
+                  b->rm.alpha_compare == 1 ? 1 : (b->rm.cvg_x_alpha ? 2 : 0));
+    p_glUniform1f(b->u_alpha_ref, b->env[3] / 255.0f);
+
+    apply_rendermode(b);
+
     p_glActiveTexture(GL_TEXTURE0);
     p_glBindTexture(GL_TEXTURE_2D, b->bound_tex);
+    apply_texture_params(b);
 
     p_glDrawArrays(GL_TRIANGLES, 0, (GLsizei)b->batch_count);
     p_glBindVertexArray(0);
@@ -364,15 +588,23 @@ static void be_end_frame(void *user)
 
 static void be_viewport(void *user, int x, int y, int w, int h)
 {
-    flush((gl_backend *)user);
-    p_glViewport(x, y, w, h);
+    gl_backend *b = (gl_backend *)user;
+    GLint ox, oy; GLsizei ow, oh;
+
+    flush(b);
+    map_rect(b, x, y, w, h, &ox, &oy, &ow, &oh);
+    p_glViewport(ox, oy, ow, oh);
 }
 
 static void be_scissor(void *user, int x, int y, int w, int h)
 {
-    flush((gl_backend *)user);
+    gl_backend *b = (gl_backend *)user;
+    GLint ox, oy; GLsizei ow, oh;
+
+    flush(b);
+    map_rect(b, x, y, w, h, &ox, &oy, &ow, &oh);
     p_glEnable(GL_SCISSOR_TEST);
-    p_glScissor(x, y, w, h);
+    p_glScissor(ox, oy, ow, oh);
 }
 
 static void be_geometry_mode(void *user, unsigned mode)
@@ -494,6 +726,95 @@ static void be_env(void *user, unsigned char r, unsigned char g,
     b->env[0] = r; b->env[1] = g; b->env[2] = bl; b->env[3] = a;
 }
 
+static void be_combine(void *user, unsigned w0, unsigned w1)
+{
+    gl_backend *b = (gl_backend *)user;
+    gfx_combiner cc;
+
+    gfxCombineDecode(w0, w1, &cc);
+    if (memcmp(&cc, &b->cc, sizeof(cc)) == 0) {
+        return;
+    }
+    flush(b);
+    b->cc = cc;
+}
+
+static void be_othermode_h(void *user, unsigned shift, unsigned len,
+                           unsigned data)
+{
+    gl_backend *b = (gl_backend *)user;
+    unsigned before = b->rm.hi;
+
+    gfxRenderModeSetH(&b->rm, shift, len, data);
+    if (b->rm.hi != before) {
+        flush(b);
+    }
+}
+
+static void be_othermode_l(void *user, unsigned shift, unsigned len,
+                           unsigned data)
+{
+    gl_backend *b = (gl_backend *)user;
+    unsigned before = b->rm.lo;
+
+    gfxRenderModeSetL(&b->rm, shift, len, data);
+    if (b->rm.lo != before) {
+        flush(b);
+    }
+}
+
+static void be_fog(void *user, unsigned char r, unsigned char g,
+                   unsigned char bl, unsigned char a)
+{
+    gl_backend *b = (gl_backend *)user;
+    b->fog[0] = r; b->fog[1] = g; b->fog[2] = bl; b->fog[3] = a;
+}
+
+static void be_fill_color(void *user, unsigned value)
+{
+    ((gl_backend *)user)->fill_color = value;
+}
+
+/*
+ * G_FILLRECT in fill mode is how the game clears the screen, and in copy mode
+ * how it draws solid bars. The fill colour is two packed RGBA5551 pixels; both
+ * halves are the same colour for a clear, so reading the low half is enough.
+ */
+static void be_fill_rect(void *user, int ulx, int uly, int lrx, int lry)
+{
+    gl_backend *b = (gl_backend *)user;
+    unsigned px = b->fill_color & 0xFFFFu;
+    float r = (float)((px >> 11) & 0x1Fu) / 31.0f;
+    float g = (float)((px >>  6) & 0x1Fu) / 31.0f;
+    float bl = (float)((px >>  1) & 0x1Fu) / 31.0f;
+
+    flush(b);
+
+    /* Scissor to the rectangle and clear, rather than drawing geometry: the
+     * rectangle is in screen pixels and has no place in the transformed
+     * pipeline. Depth is deliberately left alone -- a fill rect covers colour
+     * only, and clearing depth here would throw away the frame's z-buffer
+     * partway through drawing it. */
+    {
+        GLint ox, oy; GLsizei ow, oh;
+        map_rect(b, ulx, uly, lrx - ulx, lry - uly, &ox, &oy, &ow, &oh);
+        p_glEnable(GL_SCISSOR_TEST);
+        p_glScissor(ox, oy, ow, oh);
+    }
+    p_glClearColor(r, g, bl, 1.0f);
+    p_glClear(GL_COLOR_BUFFER_BIT);
+}
+
+static void be_tex_rect(void *user, int ulx, int uly, int lrx, int lry,
+                        int tile, int s, int t, int dsdx, int dtdy, int flip)
+{
+    (void)user; (void)ulx; (void)uly; (void)lrx; (void)lry; (void)tile;
+    (void)s; (void)t; (void)dsdx; (void)dtdy; (void)flip;
+    /* GoldenEye draws its HUD and menus through ordinary triangles rather
+     * than texture rectangles, so this stays a hook rather than a guess at
+     * screen-space quad handling that nothing would exercise. */
+}
+
 static void be_draw_triangle(void *user, const gfx_vertex *a,
                              const gfx_vertex *b_, const gfx_vertex *c)
 {
@@ -566,6 +887,28 @@ gfx_backend *gfxGLCreate(void)
     b->u_textured = p_glGetUniformLocation(b->prog, "u_textured");
     b->u_prim     = p_glGetUniformLocation(b->prog, "u_prim");
     b->u_env      = p_glGetUniformLocation(b->prog, "u_env");
+    b->u_cc_c0     = p_glGetUniformLocation(b->prog, "u_cc_c0");
+    b->u_cc_a0     = p_glGetUniformLocation(b->prog, "u_cc_a0");
+    b->u_cc_c1     = p_glGetUniformLocation(b->prog, "u_cc_c1");
+    b->u_cc_a1     = p_glGetUniformLocation(b->prog, "u_cc_a1");
+    b->u_two_cycle = p_glGetUniformLocation(b->prog, "u_two_cycle");
+    b->u_prim_lod  = p_glGetUniformLocation(b->prog, "u_prim_lod");
+    b->u_alpha_test= p_glGetUniformLocation(b->prog, "u_alpha_test");
+    b->u_alpha_ref = p_glGetUniformLocation(b->prog, "u_alpha_ref");
+
+    /* Start from the mode the RDP powers up in, and from a combiner that
+     * simply passes shade through. A list that draws before setting either
+     * then produces flat-shaded geometry rather than black. */
+    /* Identity until video.c says otherwise, so a backend driven directly --
+     * the self-test does exactly that -- behaves as it always did. */
+    b->fb_w = b->out_w = 320;
+    b->fb_h = b->out_h = 240;
+
+    gfxRenderModeInit(&b->rm);
+    gfxCombineDecode(0u, 0u, &b->cc);
+    b->cc.color[0][3] = b->cc.color[1][3] = (unsigned char)GFX_CC_SHADE;
+    b->cc.alpha[0][3] = b->cc.alpha[1][3] = (unsigned char)GFX_CC_SHADE_ALPHA;
+    b->prim_lod = 0.0f;
 
     p_glGenVertexArrays(1, &b->vao);
     p_glBindVertexArray(b->vao);
@@ -597,6 +940,13 @@ gfx_backend *gfxGLCreate(void)
     b->iface.set_viewport      = be_viewport;
     b->iface.set_scissor       = be_scissor;
     b->iface.set_geometry_mode = be_geometry_mode;
+    b->iface.set_combine       = be_combine;
+    b->iface.set_othermode_h   = be_othermode_h;
+    b->iface.set_othermode_l   = be_othermode_l;
+    b->iface.set_fog_color     = be_fog;
+    b->iface.set_fill_color    = be_fill_color;
+    b->iface.fill_rect         = be_fill_rect;
+    b->iface.tex_rect          = be_tex_rect;
     b->iface.set_texture_image = be_texture_image;
     b->iface.set_tile          = be_set_tile;
     b->iface.set_tile_size     = be_tile_size;
@@ -626,6 +976,21 @@ void gfxGLDestroy(gfx_backend *be)
     if (b->vao)  { p_glDeleteVertexArrays(1, &b->vao); }
     if (b->prog) { p_glDeleteProgram(b->prog); }
     free(b);
+}
+
+void gfxGLSetOutputSize(gfx_backend *be, int fb_w, int fb_h,
+                        int out_w, int out_h)
+{
+    gl_backend *b = (gl_backend *)be;
+
+    if (!b || fb_w <= 0 || fb_h <= 0 || out_w <= 0 || out_h <= 0) {
+        return;
+    }
+    flush(b);
+    b->fb_w = fb_w;
+    b->fb_h = fb_h;
+    b->out_w = out_w;
+    b->out_h = out_h;
 }
 
 void gfxGLFlushTextureCache(gfx_backend *be)

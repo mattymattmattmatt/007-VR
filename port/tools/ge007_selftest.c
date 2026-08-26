@@ -245,6 +245,125 @@ static void submit(const Gfx *dl, unsigned commands)
     osSpTaskStartGo(&task);
 }
 
+/* ------------------------------------------------------------ stage 3c */
+
+/*
+ * Averages the colour of everything that got rasterised. Which pixels the
+ * triangle lands on depends on the transform, so sampling one is fragile;
+ * what matters is that the shape came out the colour the combiner asked for.
+ */
+static void average_drawn_colour(int w, int h, int *r, int *g, int *b)
+{
+    void (*p_glReadPixels)(int, int, int, int, unsigned, unsigned, void *);
+    unsigned char *px;
+    long sr = 0, sg = 0, sb = 0, n = 0;
+    int i;
+
+    *r = *g = *b = -1;
+
+    p_glReadPixels = (void (*)(int, int, int, int, unsigned, unsigned, void *))
+                     SDL_GL_GetProcAddress("glReadPixels");
+    if (!p_glReadPixels) {
+        return;
+    }
+    px = (unsigned char *)calloc((size_t)w * (size_t)h, 4);
+    if (!px) {
+        return;
+    }
+    p_glReadPixels(0, 0, w, h, 0x1908, 0x1401, px);
+
+    for (i = 0; i < w * h; i++) {
+        int pr = px[i * 4], pg = px[i * 4 + 1], pb = px[i * 4 + 2];
+        if (pr || pg || pb) {
+            sr += pr; sg += pg; sb += pb; n++;
+        }
+    }
+    if (n) {
+        *r = (int)(sr / n);
+        *g = (int)(sg / n);
+        *b = (int)(sb / n);
+    }
+    free(px);
+}
+
+/*
+ * The colour combiner, checked by looking at the pixels rather than at the
+ * decoder.
+ *
+ * Both cases below draw a triangle whose shade is pure white while the
+ * primitive colour is pure red, and differ only in which the combiner
+ * selects. That is deliberately the one thing the old "texture * shade"
+ * approximation could not get right: it ignored the combiner entirely and
+ * would render both cases white. A decoder test alone would not have caught
+ * that, in the same way the earlier five bugs all passed their unit tests
+ * while the screen stayed black.
+ */
+static void stage_combiner(void)
+{
+    Vtx *v;
+    Gfx *dl;
+    Gfx *p;
+    int i, r, g, b;
+    const int w = 320, h = 240;
+
+    printf("\n== colour combiner ==\n");
+
+    v  = (Vtx *)rdramAlloc(sizeof(Vtx) * 4, 16);
+    dl = (Gfx *)rdramAlloc(sizeof(Gfx) * 16, 16);
+    if (!v || !dl) {
+        ok(0, "combiner test allocated");
+        return;
+    }
+
+    memset(v, 0, sizeof(Vtx) * 4);
+    for (i = 0; i < 3; i++) {
+        v[i].v.cn[0] = 255; v[i].v.cn[1] = 255;   /* white shade */
+        v[i].v.cn[2] = 255; v[i].v.cn[3] = 255;
+    }
+    v[0].v.ob[0] = -1; v[0].v.ob[1] = -1;
+    v[1].v.ob[0] =  1; v[1].v.ob[1] = -1;
+    v[2].v.ob[0] =  0; v[2].v.ob[1] =  1;
+
+    /* Case one: the combiner selects PRIMITIVE, which is red. */
+    p = dl;
+    gDPPipeSync(p++);
+    gSPSetGeometryMode(p++, G_SHADE | G_SHADING_SMOOTH);
+    gSPTexture(p++, 0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_OFF);
+    gDPSetCombineMode(p++, G_CC_PRIMITIVE, G_CC_PRIMITIVE);
+    gDPSetPrimColor(p++, 0, 0, 255, 0, 0, 255);
+    gSPVertex(p++, v, 3, 0);
+    gSP1Triangle(p++, 0, 1, 2, 0);
+    gSPEndDisplayList(p++);
+    submit(dl, 8);
+
+    average_drawn_colour(w, h, &r, &g, &b);
+    printf("       G_CC_PRIMITIVE with white shade -> rgb(%d,%d,%d)\n", r, g, b);
+    ok(r > 200 && g < 60 && b < 60,
+       "the combiner selected the primitive colour, not shade");
+
+    /* Case two: same geometry, same primitive colour, but the combiner picks
+     * SHADE. If the first case passed by accident -- by always using prim --
+     * this one fails. */
+    for (i = 0; i < 3; i++) {
+        v[i].v.cn[0] = 0; v[i].v.cn[1] = 255; v[i].v.cn[2] = 0;
+    }
+    p = dl;
+    gDPPipeSync(p++);
+    gSPSetGeometryMode(p++, G_SHADE | G_SHADING_SMOOTH);
+    gSPTexture(p++, 0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_OFF);
+    gDPSetCombineMode(p++, G_CC_SHADE, G_CC_SHADE);
+    gDPSetPrimColor(p++, 0, 0, 255, 0, 0, 255);
+    gSPVertex(p++, v, 3, 0);
+    gSP1Triangle(p++, 0, 1, 2, 0);
+    gSPEndDisplayList(p++);
+    submit(dl, 8);
+
+    average_drawn_colour(w, h, &r, &g, &b);
+    printf("       G_CC_SHADE with green shade      -> rgb(%d,%d,%d)\n", r, g, b);
+    ok(g > 200 && r < 60 && b < 60,
+       "the combiner selected shade, not the primitive colour");
+}
+
 static void stage_segments(void)
 {
     Gfx *sub;
@@ -408,6 +527,7 @@ int main(void)
     stage_rdram();
     stage_display_list();
     stage_render();
+    stage_combiner();
     stage_segments();
     stage_texture();
     stage_audio();

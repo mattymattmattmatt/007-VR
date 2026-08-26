@@ -19,6 +19,9 @@
  *   TLB, FPU control and SI internals are hardware-only and are stubbed.
  */
 #include "platform.h"
+#include "video.h"
+
+#include <stdlib.h>
 #include "romdata.h"
 
 #include <stdio.h>
@@ -272,14 +275,53 @@ s32 osEepromLongWrite(OSMesgQueue *mq, u8 address, u8 *buffer, int length)
     return 0;
 }
 
-/* --------------------------------------------- video interface (stubs) */
+/* --------------------------------------------- video interface */
 
-/* None of this drives anything: the renderer owns the framebuffer and its own
- * swap. These exist so the game's video bookkeeping links and runs. */
+/* Most of this drives nothing: the renderer owns the framebuffer and its own
+ * swap, so these exist mainly so the game's video bookkeeping links and runs.
+ * osCreateViManager is the exception -- see below. */
 
 static void *g_framebuffer;
 
-void  osCreateViManager(OSPri pri)            { (void)pri; }
+/*
+ * The game asks for a video manager once, during startup, before it draws
+ * anything. That makes it the natural place to open the window: it is the
+ * moment the game first says it wants a display, it happens on the game's own
+ * schedule rather than the port's, and it is early enough that the first
+ * graphics task already has somewhere to go.
+ *
+ * The window is deliberately larger than the N64's 320x240 framebuffer;
+ * gfxGLSetOutputSize maps the game's coordinates across. GE007_SCALE overrides
+ * the multiplier for anyone who wants a different size.
+ */
+void osCreateViManager(OSPri pri)
+{
+    const char *env;
+    int scale = 3;
+
+    (void)pri;
+
+    if (videoIsReady()) {
+        return;
+    }
+
+    env = getenv("GE007_SCALE");
+    if (env) {
+        int v = atoi(env);
+        if (v >= 1 && v <= 8) {
+            scale = v;
+        } else {
+            platformLog("GE007_SCALE=%s out of range 1-8, using %d", env, scale);
+        }
+    }
+
+    if (videoInit(320 * scale, 240 * scale, "GoldenEye 007") != 0) {
+        /* Fatal rather than silent: without a window the game runs blind,
+         * building display lists that go nowhere, and the first sign of
+         * trouble would be a black screen with no explanation. */
+        platformPanic("ge007: could not open the game window");
+    }
+}
 void  osViSetMode(OSViMode *m)                { (void)m; }
 void  osViSetEvent(OSMesgQueue *mq, OSMesg m, u32 n) { (void)mq; (void)m; (void)n; }
 void  osViSetSpecialFeatures(u32 f)           { (void)f; }

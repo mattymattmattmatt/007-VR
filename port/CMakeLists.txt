@@ -31,6 +31,7 @@ add_library(ge007_platform STATIC
     src/sha1.c
     src/gbi_walk.c
     src/gfx_state.c
+    src/gfx_rdp.c
     src/rdram.c
     src/libultra_stubs.c
     src/gfx_texture.c
@@ -196,6 +197,11 @@ if(GEPC_BUILD_TESTS)
     target_link_libraries(ge007_rdram_tests PRIVATE ge007_platform)
     add_test(NAME ge007_rdram COMMAND ge007_rdram_tests)
     set_tests_properties(ge007_rdram PROPERTIES TIMEOUT 60)
+
+    add_executable(ge007_rdp_tests tests/test_gfx_rdp.c)
+    target_link_libraries(ge007_rdp_tests PRIVATE ge007_platform)
+    add_test(NAME ge007_gfx_rdp COMMAND ge007_rdp_tests)
+    set_tests_properties(ge007_gfx_rdp PROPERTIES TIMEOUT 60)
 
     add_executable(ge007_accessor_tests tests/test_gbi_accessors.c)
     target_link_libraries(ge007_accessor_tests PRIVATE ge007_platform)

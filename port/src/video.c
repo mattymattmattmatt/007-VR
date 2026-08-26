@@ -22,6 +22,14 @@ static gfx_state    *g_state;
 static int           g_ready;
 static int           g_quit;
 
+/*
+ * What the game believes it is drawing into. Every viewport, scissor and fill
+ * rectangle it issues is in these coordinates, so the backend needs both this
+ * and the real window size to map between them.
+ */
+#define GEPC_FB_WIDTH  320
+#define GEPC_FB_HEIGHT 240
+
 static int      g_present = 1;
 static unsigned g_frames;
 static unsigned g_triangles;
@@ -123,6 +131,8 @@ int videoInit(int width, int height, const char *title)
         return -1;
     }
 
+    gfxGLSetOutputSize(g_backend, GEPC_FB_WIDTH, GEPC_FB_HEIGHT, width, height);
+
     spSetGfxTaskHandler(on_gfx_task, NULL);
     g_ready = 1;
 
@@ -156,6 +166,15 @@ int videoPumpEvents(void)
         } else if (ev.type == SDL_WINDOWEVENT &&
                    ev.window.event == SDL_WINDOWEVENT_CLOSE) {
             g_quit = 1;
+        } else if (ev.type == SDL_WINDOWEVENT &&
+                   (ev.window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
+                    ev.window.event == SDL_WINDOWEVENT_RESIZED)) {
+            /* The window is resizable, so the mapping has to follow it or the
+             * picture keeps rendering at the old size. */
+            if (g_backend) {
+                gfxGLSetOutputSize(g_backend, GEPC_FB_WIDTH, GEPC_FB_HEIGHT,
+                                   ev.window.data1, ev.window.data2);
+            }
         }
     }
     return g_quit;

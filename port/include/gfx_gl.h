@@ -23,6 +23,16 @@ void         gfxGLDestroy(gfx_backend *be);
 
 const char  *gfxGLLastError(void);
 
+/*
+ * The game issues viewports and scissors in its own 320x240 framebuffer
+ * coordinates, with y measured from the top. Tell the backend how big the
+ * output actually is and it maps them across, flipping y for GL's
+ * bottom-left origin. Without this the whole picture renders into a 320x240
+ * patch in the corner of the window.
+ */
+void gfxGLSetOutputSize(gfx_backend *be, int fb_w, int fb_h,
+                        int out_w, int out_h);
+
 /* Drops every cached texture. Needed when the game reloads a level, since
  * source addresses are reused for different data. */
 void gfxGLFlushTextureCache(gfx_backend *be);
