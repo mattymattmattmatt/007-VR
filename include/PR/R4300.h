@@ -60,6 +60,30 @@
 
 #else /* _LANGUAGE_C */
 
+#ifdef GEPC
+/*
+ * The PC port has one flat address space, so these are all the identity.
+ *
+ * KSEG0 and KSEG1 are two cached/uncached windows onto the same physical
+ * memory, and on the console the top bits select the window. Here there is
+ * only the mapping the host gave us: osPhysicalToVirtual already returns its
+ * argument unchanged, and the RDRAM arena lives wherever mmap put it, low
+ * enough to fit a u32. Setting the top bit would name an address nothing has
+ * mapped -- boss.c takes PHYS_TO_K0 of the arena base to find the start of the
+ * memory pool, and on the console that is a window; here it would be a
+ * segfault the first time the pool is written.
+ *
+ * Thirteen uses across the game, all of them converting between views of an
+ * address rather than doing arithmetic that depends on the bits.
+ */
+#define	K0_TO_K1(x)	((u32)(x))
+#define	K1_TO_K0(x)	((u32)(x))
+#define	K0_TO_PHYS(x)	((u32)(x))
+#define	K1_TO_PHYS(x)	((u32)(x))
+#define	KDM_TO_PHYS(x)	((u32)(x))
+#define	PHYS_TO_K0(x)	((u32)(x))
+#define	PHYS_TO_K1(x)	((u32)(x))
+#else
 #define	K0_TO_K1(x)	((u32)(x)|0xA0000000)	/* kseg0 to kseg1 */
 #define	K1_TO_K0(x)	((u32)(x)&0x9FFFFFFF)	/* kseg1 to kseg0 */
 #define	K0_TO_PHYS(x)	((u32)(x)&0x1FFFFFFF)	/* kseg0 to physical */
@@ -67,6 +91,7 @@
 #define	KDM_TO_PHYS(x)	((u32)(x)&0x1FFFFFFF)	/* direct mapped to physical */
 #define	PHYS_TO_K0(x)	((u32)(x)|0x80000000)	/* physical to kseg0 */
 #define	PHYS_TO_K1(x)	((u32)(x)|0xA0000000)	/* physical to kseg1 */
+#endif
 
 #endif	/* _LANGUAGE_ASSEMBLY */
 

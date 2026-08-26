@@ -22,7 +22,19 @@
  * and still issue draw calls -- they are simply all degenerate, so the screen
  * stays black. The self-test found it exactly that way, by reading pixels back
  * rather than trusting the counters. */
-#define GEPC_RDRAM_MIN_BASE 0x00100000u   /* clear of vm.mmap_min_addr */
+/*
+ * The arena is pinned rather than placed wherever it fits, because the game's
+ * memory pool has to start at a link-time constant: boss.c takes the address
+ * of _bssSegmentEnd to find it, and that symbol is defined by --defsym when
+ * the executable is linked (see port/tools/gen_segment_defsyms.py). An arena
+ * that moved would leave the pool pointing somewhere nothing has mapped.
+ *
+ * 0x800000 is the only base that satisfies both ends. It has to clear the
+ * executable, which -no-pie loads at 0x400000, and the arena's 8 MB has to end
+ * by 0x1000000 or addresses in it stop carrying segment index 0 -- so the base
+ * can be no higher either. Both constraints meet exactly here.
+ */
+#define GEPC_RDRAM_BASE     0x00800000u
 #define GEPC_RDRAM_MAX_END  0x01000000u   /* 16 MB: keeps segment index 0 */
 
 static unsigned char *g_base;
@@ -68,12 +80,13 @@ int rdramInit(void)
      * rests on. Static display lists live in the executable, not in here. */
     gepcAssertLowMemory();
 
-    /* Walk upward looking for a free low region. The address is requested
-     * exactly, never merely hinted, because a kernel that quietly relocates
-     * the mapping somewhere high would reintroduce the bug above. */
-    for (candidate = GEPC_RDRAM_MIN_BASE;
-         candidate + GEPC_RDRAM_SIZE <= GEPC_RDRAM_MAX_END;
-         candidate += 0x00100000u) {
+    /* One address, requested exactly and never merely hinted: a kernel that
+     * quietly relocated the mapping somewhere high would reintroduce the bug
+     * above, and anywhere other than GEPC_RDRAM_BASE would put the memory
+     * pool where _bssSegmentEnd does not point. */
+    for (candidate = GEPC_RDRAM_BASE;
+         candidate == GEPC_RDRAM_BASE;
+         candidate += GEPC_RDRAM_SIZE) {
 #if defined(_WIN32)
         p = VirtualAlloc((LPVOID)candidate, GEPC_RDRAM_SIZE,
                          MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);

@@ -72,6 +72,24 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    /*
+     * The game finds its memory pool by taking the address of _bssSegmentEnd,
+     * which is fixed at link time. If the arena did not land there the pool
+     * would be handed memory nothing has mapped, and the first write into it
+     * would be a segfault a long way from the cause.
+     */
+    {
+        extern unsigned char _bssSegmentEnd;
+        const void *pool = (const void *)&_bssSegmentEnd;
+
+        if (pool != rdramBase()) {
+            fprintf(stderr,
+                    "ge007: the RDRAM arena is at %p but the game's memory "
+                    "pool starts at %p.\n", rdramBase(), pool);
+            return 1;
+        }
+    }
+
     if (!rom) {
         explain_missing_rom(NULL);
         return 2;

@@ -55,6 +55,7 @@ add_library(ge007_platform STATIC
     src/audio_abi.c
     src/obseg.c
     src/game_random.c
+    src/game_symbols.c
     ${GEPC_ROM_MANIFEST}
 )
 
@@ -331,11 +332,34 @@ if(GEPC_SDL2_FOUND)
     add_executable(ge007-selftest tools/ge007_selftest.c)
     target_link_libraries(ge007-selftest PRIVATE ge007_gfx_gl)
 
+# ge007.ld gives every ROM segment a symbol for where it sits in the
+    # cartridge, and the game takes those symbols' *addresses* -- it DMAs from
+    # &_xSegmentRomStart and sizes the transfer from the gap to the next one.
+    # Nothing reads one as a value, so --defsym can place them at literal
+    # cartridge addresses: no source change, no runtime lookup, and the
+    # difference between two of them is the real size because the addresses
+    # are real. Offsets come from the same manifest as the file table.
+    set(GEPC_DEFSYMS "${CMAKE_CURRENT_BINARY_DIR}/generated/segment_defsyms.txt")
+    execute_process(
+        COMMAND "${CMAKE_COMMAND}" -E make_directory
+                "${CMAKE_CURRENT_BINARY_DIR}/generated")
+    execute_process(
+        COMMAND python3 "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_segment_defsyms.py"
+                "${GEPC_REPO_ROOT}/scripts/filelist.u.csv" "${GEPC_DEFSYMS}"
+        RESULT_VARIABLE GEPC_DEFSYM_RC)
+    if(NOT GEPC_DEFSYM_RC EQUAL 0)
+        message(FATAL_ERROR "could not generate the ROM segment symbols")
+    endif()
+    file(STRINGS "${GEPC_DEFSYMS}" GEPC_DEFSYM_LIST)
+
     # The playable executable. src/main.c stands in for boot.s: it brings the
     # machine up and then calls the game's own init(), exactly as the
     # cartridge did.
     add_executable(ge007 src/main.c)
     target_link_libraries(ge007 PRIVATE ge007_game ge007_gfx_gl)
+    foreach(_sym IN LISTS GEPC_DEFSYM_LIST)
+        target_link_options(ge007 PRIVATE "LINKER:${_sym}")
+    endforeach()
     if(NOT MSVC)
         target_link_libraries(ge007 PRIVATE m)
     endif()
