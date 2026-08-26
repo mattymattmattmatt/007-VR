@@ -1,4 +1,9 @@
 #include <ultra64.h>
+#ifdef GEPC
+/* For GFX_CMD, used by debugMenuBindTextureAddress below. Guarded so the ROM
+ * build's token stream is untouched. */
+#    include <gbi_extension.h>
+#endif
 #include "debugmenu.h"
 #include "vi.h"
 #include "game/dyn.h"
@@ -41,6 +46,27 @@ s32 g_DebugMenuTextStartX = 5;
 s32 g_DebugMenuTextStartY = 1;
 s32 g_DebugMenuTextCurrentX = 24;
 s32 g_DebugMenuTextCurrentY = 16;
+/*
+ * This is the one static display list in the game that holds a pointer.
+ *
+ * A display list command word is 32 bits (see the GEPC branch of Gwords in
+ * include/PR/gbi.h -- it has to be, because every list the game reads out of
+ * the ROM is 8-byte commands), and narrowing an address is not an address
+ * constant in C. That is a rule about the language, not about the addresses:
+ * the RDRAM arena and -no-pie between them guarantee the value fits in 32
+ * bits, but no amount of that makes the initialiser legal. Unlike the monitor
+ * scripts in propobj.c, widening the word is not an option here.
+ *
+ * So the address is left out of the initialiser and written in on first use.
+ * The list is drawn from exactly one place, immediately below, so there is no
+ * startup ordering to arrange and nothing to remember to call.
+ */
+#ifdef GEPC
+#    define GEPC_DEFERRED_TIMG 0
+#else
+#    define GEPC_DEFERRED_TIMG &g_DebugMenuTexture
+#endif
+
 Gfx g_DebugMenuTextureDisplayList[] = {
     gsDPPipeSync(),
     gsDPSetCycleType(G_CYC_1CYCLE),
@@ -50,10 +76,41 @@ Gfx g_DebugMenuTextureDisplayList[] = {
     gsDPSetTexturePersp(G_TP_NONE),
     //gsDPSetTextureLUT(G_TT_NONE),
     gsDPSetAlphaCompare(G_AC_NONE),
-    gsDPLoadTextureBlock(&g_DebugMenuTexture, G_IM_FMT_IA, G_IM_SIZ_8b, 128, 21, 0, (G_TX_NOMIRROR | G_TX_WRAP), (G_TX_NOMIRROR | G_TX_WRAP), G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD, G_TX_NOLOD),
+    gsDPLoadTextureBlock(GEPC_DEFERRED_TIMG, G_IM_FMT_IA, G_IM_SIZ_8b, 128, 21, 0, (G_TX_NOMIRROR | G_TX_WRAP), (G_TX_NOMIRROR | G_TX_WRAP), G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD, G_TX_NOLOD),
     gsDPLoadSync(),
     gsSPEndDisplayList()
 };
+#ifdef GEPC
+static void debugMenuBindTextureAddress(void)
+{
+    static s32 bound = FALSE;
+    Gfx *cmd;
+
+    if (bound)
+    {
+        return;
+    }
+
+    /* gsDPLoadTextureBlock expands to a fixed run of commands and the address
+     * lives in the G_SETTIMG one. Search for it rather than indexing, so this
+     * keeps working if the macro's expansion ever changes shape. */
+    for (cmd = g_DebugMenuTextureDisplayList; GFX_CMD(cmd) != G_ENDDL; cmd++)
+    {
+        if (GFX_CMD(cmd) == G_SETTIMG)
+        {
+            cmd->words.w1 = (u32) (uintptr_t) g_DebugMenuTexture;
+            bound = TRUE;
+            return;
+        }
+    }
+
+    /* No G_SETTIMG means the expansion changed and this no longer knows where
+     * the address goes. Leave `bound` clear so it is retried, rather than
+     * silently drawing from address zero from here on. */
+    osSyncPrintf("debugmenu: no G_SETTIMG in the texture display list\n");
+}
+#endif
+
 character g_DebugMenuTextBuffer[80][35] = {0}; // unused in the final game (waste of space)
 Gfx g_DHudFgGbiPtrs[32] = {0};
 Gfx g_DHudBgGbiPtrs[32] = {0};
@@ -387,6 +444,9 @@ Gfx *debmenuDraw(Gfx *gdl)
 			g_DebugMenuPercentage = 256;
 		}
 
+#ifdef GEPC
+		debugMenuBindTextureAddress();
+#endif
 		gSPDisplayList(gdl++, g_DebugMenuTextureDisplayList);
 
         // Build the display list for real this time.

@@ -3235,9 +3235,39 @@ typedef union
         }
 
     //[This struct uses original names]
+    /*
+     * The monitor animation scripts are arrays of words that mix small
+     * integers with *addresses of other scripts*: MONJUMPTO(p) assembles
+     * "0x9, p" straight into the array, and the interpreter casts the word
+     * back with (u32 *) m->time. There are 59 such jumps across 42 scripts in
+     * propobj.c.
+     *
+     * On the N64 a word and a pointer were both 32 bits, so that was an
+     * ordinary static initialiser. Here a pointer is 64 bits, and narrowing
+     * one is not an address constant in C -- GCC rejects it as "initializer
+     * element is not computable at load time" no matter how the build is
+     * linked, because the constraint is on the language, not the addresses.
+     * The RDRAM arena and -no-pie make the *values* fit; they cannot make the
+     * initialiser legal.
+     *
+     * So on the PC the script word is pointer-sized and nothing is truncated.
+     * The interpreter counts in elements (offset += 3 over a struct tvcmd
+     * laid across them), so widening the word widens the command in step and
+     * the arithmetic is unchanged. A macro rather than a typedef, so that
+     * without GEPC this preprocesses to precisely the tokens that were here
+     * before.
+     */
+#ifdef GEPC
+#    define MONWORD  uintptr_t
+#    define MONSWORD intptr_t
+#else
+#    define MONWORD  u32
+#    define MONSWORD s32
+#endif
+
     typedef struct MonitorRecord
     {
-        u32 *cmdlist;   // 0x80	4	image pointer for this monitor
+        MONWORD *cmdlist;   // 0x80	4	image pointer for this monitor
         u16 offset;     // 0x84	2	[runtime] cur. #commands from start of routine
         s16 pause60;    // 0x86	2	[runtime] loop counter
         struct sImageTableEntry *tconfig;      //0x88	4	[runtime] monitor image# or p->image header
