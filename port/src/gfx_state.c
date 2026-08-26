@@ -600,3 +600,38 @@ int gfxStateRun(gfx_state *st, const void *dl, unsigned max_commands)
 
     return -1;
 }
+
+int gfxPatchListPointers(void *dl, unsigned max_commands,
+                         void *const *targets, unsigned count)
+{
+    Gfx *pc = (Gfx *)dl;
+    unsigned used = 0;
+    unsigned seen = 0;
+
+    if (!pc || !targets) {
+        return -1;
+    }
+
+    for (; seen < max_commands; seen++, pc++) {
+        unsigned w0 = (unsigned)pc->words.w0;
+        int op = (int)(signed char)((w0 >> 24) & 0xFFu);
+
+        if (op == (int)(signed char)G_ENDDL) {
+            break;
+        }
+        if (op == (int)(signed char)G_VTX ||
+            op == (int)(signed char)G_SETTIMG) {
+            if (used >= count) {
+                /* More commands want an address than the table supplies. */
+                return -1;
+            }
+            pc->words.w1 = (u32)(uintptr_t)targets[used++];
+        }
+    }
+
+    if (seen >= max_commands) {
+        return -1;      /* ran off the end without finding G_ENDDL */
+    }
+    /* A table longer than the list is just as much a mismatch. */
+    return (used == count) ? (int)used : -1;
+}

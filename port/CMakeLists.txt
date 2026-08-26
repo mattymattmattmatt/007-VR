@@ -219,6 +219,63 @@ endif()
 
 # --------------------------------------------------------------- GL backend
 
+# ---------------------------------------------------------------- the game
+#
+# Until now nothing here compiled the game's own sources. The survey in
+# port/tools/compile-survey.sh proves each translation unit compiles on its
+# own, which is a weaker claim than "these link together": it says nothing
+# about duplicate definitions, symbols nobody provides, or whether there is an
+# entry point at all.
+#
+# The exclusions match the survey's exactly. src/libultra/os, src/libultra/io
+# and src/libultrare are the N64 hardware layers that port/src/libultra.c
+# replaces; src/libultra/libc/string.c defines strchr, strlen and memcpy over
+# `const unsigned char *`, which on a hosted build are glibc's. Keep this list
+# and the survey's in step -- they are measuring the same thing.
+file(GLOB_RECURSE GEPC_GAME_SOURCES CONFIGURE_DEPENDS
+     "${GEPC_REPO_ROOT}/src/*.c")
+list(FILTER GEPC_GAME_SOURCES EXCLUDE REGEX "/src/libultra/os/")
+list(FILTER GEPC_GAME_SOURCES EXCLUDE REGEX "/src/libultra/io/")
+list(FILTER GEPC_GAME_SOURCES EXCLUDE REGEX "/src/libultrare/")
+list(FILTER GEPC_GAME_SOURCES EXCLUDE REGEX "/src/libultra/libc/string\\.c$")
+
+# The Makefile splits the assets in two, and so does this.
+#
+# ASSET_DATAFILES and the fonts are ordinary data linked into the code
+# segment -- the animation table, the font glyphs, the Rareware logo -- so
+# they compile like any other source. Everything under assets/obseg is not:
+# ob_seg.s .incbins compressed files that the Makefile extracts from the
+# player's ROM into build/u/assets/obseg, and a fresh checkout has none of
+# them. Those become ROM segments the game loads on demand, which is what
+# port/src/romdata.c exists for; they must not be linked here.
+#
+# The 1080 .inc.c files under assets/ are #included by the sources above and
+# must never be compiled on their own.
+list(APPEND GEPC_GAME_SOURCES
+     "${GEPC_REPO_ROOT}/assets/animationtable_data.c"
+     "${GEPC_REPO_ROOT}/assets/animationtable_entries.c"
+     "${GEPC_REPO_ROOT}/assets/font_dl.c"
+     "${GEPC_REPO_ROOT}/assets/font_chardatae.c"
+     "${GEPC_REPO_ROOT}/assets/font_chardataj.c"
+     "${GEPC_REPO_ROOT}/assets/oddtextures.c"
+     "${GEPC_REPO_ROOT}/assets/rarewarelogo.c"
+     "${GEPC_REPO_ROOT}/assets/font/fontBankGothic.c"
+     "${GEPC_REPO_ROOT}/assets/font/fontZurichBold.c")
+
+list(LENGTH GEPC_GAME_SOURCES GEPC_GAME_COUNT)
+message(STATUS "ge007: ${GEPC_GAME_COUNT} game translation units")
+
+add_library(ge007_game STATIC ${GEPC_GAME_SOURCES})
+target_link_libraries(ge007_game PUBLIC ge007_platform)
+
+# The game's sources are a 1997 codebase built by a compiler that warned about
+# far less. Their warnings are not actionable here and would bury the port's
+# own, so they are quietened for this target only; ge007_platform keeps
+# -Wall -Wextra.
+if(NOT MSVC)
+    target_compile_options(ge007_game PRIVATE -w)
+endif()
+
 # The only part of the renderer that needs a GPU. Everything with a right
 # answer -- display-list decoding, the matrix stack, texture conversion --
 # lives in ge007_platform and is tested headlessly, so this staying optional
@@ -244,6 +301,15 @@ if(GEPC_SDL2_FOUND)
     #   LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a ./ge007-selftest
     add_executable(ge007-selftest tools/ge007_selftest.c)
     target_link_libraries(ge007-selftest PRIVATE ge007_gfx_gl)
+
+    # The playable executable. src/main.c stands in for boot.s: it brings the
+    # machine up and then calls the game's own init(), exactly as the
+    # cartridge did.
+    add_executable(ge007 src/main.c)
+    target_link_libraries(ge007 PRIVATE ge007_game ge007_gfx_gl)
+    if(NOT MSVC)
+        target_link_libraries(ge007 PRIVATE m)
+    endif()
 else()
     message(STATUS
         "ge007 port: SDL2 not found; skipping the OpenGL backend. "

@@ -24,6 +24,28 @@
 extern "C" {
 #endif
 
+/*
+ * Restores the pointers in a statically initialised display list.
+ *
+ * A display list command word is 32 bits, and narrowing an address is not an
+ * address constant in C, so a list written as data in a source file cannot
+ * hold a pointer -- GCC rejects the initialiser outright, whatever the
+ * address turns out to be. src/debugmenu.c has one such list and
+ * assets/rarewarelogo.c has nine.
+ *
+ * The fix is to leave the addresses out of the initialiser and supply them
+ * separately as an ordinary array of pointers, which is a perfectly legal
+ * static initialiser because nothing is narrowed. This then walks the list and
+ * writes them into the commands that take one -- G_VTX and G_SETTIMG -- in the
+ * order they appear.
+ *
+ * Returns the number of commands patched, so a table that has drifted out of
+ * step with its list is caught at startup instead of rendering from address
+ * zero. -1 if the list could not be walked.
+ */
+int gfxPatchListPointers(void *dl, unsigned max_commands,
+                         void *const *targets, unsigned count);
+
 /* Rare's compact vertex format fits 32 entries. G_TRI4's 4-bit indices only
  * reach the first 16; G_TRI1 reaches the rest. */
 #define GEPC_VTX_CACHE      32

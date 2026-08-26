@@ -7,6 +7,26 @@ u8 rgba000C[4] = { 0xFF, 0xFF, 0xFF, 0x00 };
 u8 rgba0010[4] = { 0x00, 0x7F, 0x00, 0x00 };
 u8 rgba0014[4] = { 0x00, 0x00, 0x00, 0x00 };
 
+/*
+ * A display list command word is 32 bits, and narrowing an address is not an
+ * address constant in C, so the vertex and texture pointers below cannot sit
+ * in these lists as data -- GCC rejects the initialiser outright, whatever
+ * the address turns out to be. The N64 build has no such problem, because
+ * there a pointer *is* 32 bits.
+ *
+ * So for the PC build the addresses leave the initialiser and come back as
+ * ordinary pointer arrays, which narrow nothing and initialise fine.
+ * gfxPatchListPointers writes them into the commands that take one, in the
+ * order they appear, and reports a mismatch rather than leaving a list
+ * pointing at address zero. Without GEPC every line below preprocesses to
+ * exactly the tokens it did before.
+ */
+#ifdef GEPC
+#  define GEPC_DL_PTR(p) 0
+#else
+#  define GEPC_DL_PTR(p) p
+#endif
+
 Gfx DL_0x0018[] = {
     gsSPEndDisplayList(),
 };
@@ -1127,7 +1147,7 @@ Gfx D_020043E8[] = {
     gsDPSetRenderMode(G_RM_AA_OPA_SURF, G_RM_AA_OPA_SURF2),
     gsDPSetCombineLERP(TEXEL0, 0, PRIMITIVE, 0,  TEXEL0, 0, PRIMITIVE, 0,  TEXEL0, 0, PRIMITIVE, 0,  TEXEL0, 0, PRIMITIVE, 0),
     gsSPSetGeometryMode(G_LIGHTING |  G_TEXTURE_GEN ),
-    gsSPVertex(verts2B18, 16, 0),
+    gsSPVertex(GEPC_DL_PTR(verts2B18), 16, 0),
     gsSP1Triangle(8, 9, 10, 0),
     gsSP1Triangle(8, 10, 11, 0),
     gsSP1Triangle(8, 11, 15, 0),
@@ -1142,7 +1162,7 @@ Gfx D_020043E8[] = {
     gsSP1Triangle(8, 3, 4, 0),
     gsSP1Triangle(8, 4, 5, 0),
     gsSP1Triangle(8, 5, 6, 0),
-    gsSPVertex(verts2C18, 14, 0),
+    gsSPVertex(GEPC_DL_PTR(verts2C18), 14, 0),
     gsSP1Triangle(7, 8, 9, 0),
     gsSP1Triangle(7, 9, 10, 0),
     gsSP1Triangle(7, 10, 11, 0),
@@ -1158,7 +1178,7 @@ Gfx DL_RAREWARETEXT[] = {
     gsDPSetCombineLERP(TEXEL0, TEXEL0, LOD_FRACTION, TEXEL0,  TEXEL0, TEXEL0, LOD_FRACTION, TEXEL0,  COMBINED, 0, PRIMITIVE, 0,  COMBINED, 0, PRIMITIVE, 0),
     gsDPSetTextureLOD(G_TL_LOD),
 
-    gsDPSetTextureImage(G_IM_FMT_RGBA,  G_IM_SIZ_16b, 1,  &imgRAre_0x0020),
+    gsDPSetTextureImage(G_IM_FMT_RGBA,  G_IM_SIZ_16b, 1,  GEPC_DL_PTR(&imgRAre_0x0020)),
     gsDPSetTile(G_IM_FMT_RGBA,  G_IM_SIZ_16b, 0, 0, 7, 0, G_TX_WRAP, 0, 0, G_TX_WRAP, 0, 0),
     gsDPLoadSync(),
     gsDPLoadBlock(7, 0, 0, 1371, 0),
@@ -1175,12 +1195,12 @@ Gfx DL_RAREWARETEXT[] = {
     gsDPSetTile(G_IM_FMT_RGBA,  G_IM_SIZ_16b, 1, 342, 5, 0, G_TX_WRAP, 0, 5, G_TX_WRAP, 0, 5),
     gsDPSetTileSize(5, 2, 2, 2, 2),
     gsDPSetRenderMode(G_RM_PASS, G_RM_OPA_SURF2),
-    gsSPVertex(verts2C18, 14, 0),
+    gsSPVertex(GEPC_DL_PTR(verts2C18), 14, 0),
     gsSP1Triangle(13, 6, 0, 0),
     gsSP1Triangle(13, 0, 1, 0),
     gsDPPipeSync(),
 
-    gsDPSetTextureImage(G_IM_FMT_RGBA,  G_IM_SIZ_16b, 1,  &img_raRE_0x0AE0),
+    gsDPSetTextureImage(G_IM_FMT_RGBA,  G_IM_SIZ_16b, 1,  GEPC_DL_PTR(&img_raRE_0x0AE0)),
     gsDPSetTile(G_IM_FMT_RGBA,  G_IM_SIZ_16b, 0, 0, 7, 0, G_TX_WRAP, 0, 0, G_TX_WRAP, 0, 0),
     gsDPLoadSync(),
     gsDPLoadBlock(7, 0, 0, 1371, 0),
@@ -1200,7 +1220,7 @@ Gfx DL_RAREWARETEXT[] = {
     gsSP1Triangle(2, 4, 5, 0),
     gsDPPipeSync(),
 
-    gsDPSetTextureImage(G_IM_FMT_RGBA,  G_IM_SIZ_16b, 1,  &imgWAre_0x15A0),
+    gsDPSetTextureImage(G_IM_FMT_RGBA,  G_IM_SIZ_16b, 1,  GEPC_DL_PTR(&imgWAre_0x15A0)),
     gsDPSetTile(G_IM_FMT_RGBA,  G_IM_SIZ_16b, 0, 0, 7, 0, G_TX_WRAP, 0, 0, G_TX_WRAP, 0, 0),
     gsDPLoadSync(),
     gsDPLoadBlock(7, 0, 0, 1371, 0),
@@ -1216,12 +1236,12 @@ Gfx DL_RAREWARETEXT[] = {
     gsDPSetTileSize(4, 2, 2, 6, 6),
     gsDPSetTile(G_IM_FMT_RGBA,  G_IM_SIZ_16b, 1, 0x156, 5, 0, G_TX_WRAP, 0, 5, G_TX_WRAP, 0, 5),
     gsDPSetTileSize(5, 2, 2, 2, 2),
-    gsSPVertex(verts2CF8, 16, 0),
+    gsSPVertex(GEPC_DL_PTR(verts2CF8), 16, 0),
     gsSP1Triangle(8, 9, 10, 0),
     gsSP1Triangle(8, 10, 11, 0),
     gsDPPipeSync(),
 
-    gsDPSetTextureImage(G_IM_FMT_RGBA,  G_IM_SIZ_16b, 1,  &imgwaRE_0x2060),
+    gsDPSetTextureImage(G_IM_FMT_RGBA,  G_IM_SIZ_16b, 1,  GEPC_DL_PTR(&imgwaRE_0x2060)),
     gsDPSetTile(G_IM_FMT_RGBA,  G_IM_SIZ_16b, 0, 0, 7, 0, G_TX_WRAP, 0, 0, G_TX_WRAP, 0, 0),
     gsDPLoadSync(),
     gsDPLoadBlock(7, 0, 0, 1371, 0),
@@ -1250,14 +1270,14 @@ Gfx D_02004758[] = {
     gsSPTexture(0x1C81, 0x1426, 0, 0, 1),
     gsDPSetTileSize(0, 46, 116, 124, 124),
 
-    gsSPVertex(verts2CF8, 16, 0),
+    gsSPVertex(GEPC_DL_PTR(verts2CF8), 16, 0),
     gsSP1Triangle(7, 0, 1, 0),
     gsSP1Triangle(7, 1, 2, 0),
     gsSP1Triangle(3, 4, 5, 0),
     gsSP1Triangle(3, 5, 6, 0),
 
-    gsSPVertex(verts2DF8, 16, 0),
-    gsSPVertex(verts2EF8, 14, 0),
+    gsSPVertex(GEPC_DL_PTR(verts2DF8), 16, 0),
+    gsSPVertex(GEPC_DL_PTR(verts2EF8), 14, 0),
     gsSP1Triangle(7, 8, 9, 0),
     gsSP1Triangle(7, 9, 10, 0),
     gsSP1Triangle(11, 12, 7, 0),
@@ -1269,7 +1289,7 @@ Gfx D_02004758[] = {
     gsSP1Triangle(2, 3, 4, 0),
     gsSP1Triangle(2, 4, 5, 0),
 
-    gsSPVertex(verts2FD8, 16, 0),
+    gsSPVertex(GEPC_DL_PTR(verts2FD8), 16, 0),
     gsSP1Triangle(8, 9, 10, 0),
     gsSP1Triangle(11, 9, 8, 0),
     gsSP1Triangle(11, 8, 15, 0),
@@ -1283,7 +1303,7 @@ Gfx D_02004758[] = {
     gsSP1Triangle(1, 2, 3, 0),
     gsSP1Triangle(4, 5, 6, 0),
 
-    gsSPVertex(verts30D8, 14, 0),
+    gsSPVertex(GEPC_DL_PTR(verts30D8), 14, 0),
     gsSP1Triangle(7, 8, 9, 0),
     gsSP1Triangle(10, 11, 12, 0),
     gsSP1Triangle(10, 12, 13, 0),
@@ -1291,7 +1311,7 @@ Gfx D_02004758[] = {
     gsSP1Triangle(6, 1, 2, 0),
     gsSP1Triangle(3, 4, 5, 0),
 
-    gsSPVertex(verts31B8, 14, 0),
+    gsSPVertex(GEPC_DL_PTR(verts31B8), 14, 0),
     gsSP1Triangle(7, 8, 9, 0),
     gsSP1Triangle(7, 9, 10, 0),
     gsSP1Triangle(11, 12, 9, 0),
@@ -1303,7 +1323,7 @@ Gfx D_02004758[] = {
     gsSP1Triangle(2, 3, 4, 0),
     gsSP1Triangle(2, 4, 5, 0),
 
-    gsSPVertex(verts3298, 16, 0),
+    gsSPVertex(GEPC_DL_PTR(verts3298), 16, 0),
     gsSP1Triangle(8, 9, 10, 0),
     gsSP1Triangle(8, 10, 11, 0),
     gsSP1Triangle(15, 14, 13, 0),
@@ -1313,7 +1333,7 @@ Gfx D_02004758[] = {
     gsSP1Triangle(3, 4, 5, 0),
     gsSP1Triangle(3, 5, 6, 0),
 
-    gsSPVertex(verts3398, 16, 0),
+    gsSPVertex(GEPC_DL_PTR(verts3398), 16, 0),
     gsSP1Triangle(8, 9, 10, 0),
     gsSP1Triangle(8, 10, 11, 0),
     gsSP1Triangle(15, 14, 13, 0),
@@ -1325,7 +1345,7 @@ Gfx D_02004758[] = {
     gsSP1Triangle(5, 4, 3, 0),
     gsSP1Triangle(5, 3, 6, 0),
 
-    gsSPVertex(verts3498, 16, 0),
+    gsSPVertex(GEPC_DL_PTR(verts3498), 16, 0),
     gsSP1Triangle(8, 9, 10, 0),
     gsSP1Triangle(8, 10, 11, 0),
     gsSP1Triangle(8, 11, 15, 0),
@@ -1339,7 +1359,7 @@ Gfx D_02004758[] = {
     gsSP1Triangle(5, 3, 4, 0),
     gsSP1Triangle(5, 4, 6, 0),
 
-    gsSPVertex(verts3598, 14, 0),
+    gsSPVertex(GEPC_DL_PTR(verts3598), 14, 0),
     gsSP1Triangle(7, 8, 9, 0),
     gsSP1Triangle(7, 9, 10, 0),
     gsSP1Triangle(11, 12, 8, 0),
@@ -1351,7 +1371,7 @@ Gfx D_02004758[] = {
     gsSP1Triangle(2, 3, 4, 0),
     gsSP1Triangle(2, 4, 5, 0),
 
-    gsSPVertex(verts3678, 16, 0),
+    gsSPVertex(GEPC_DL_PTR(verts3678), 16, 0),
     gsSP1Triangle(8, 9, 10, 0),
     gsSP1Triangle(8, 10, 11, 0),
     gsSP1Triangle(15, 14, 13, 0),
@@ -1363,7 +1383,7 @@ Gfx D_02004758[] = {
     gsSP1Triangle(12, 5, 6, 0),
     gsSP1Triangle(12, 6, 15, 0),
 
-    gsSPVertex(verts3778, 16, 0),
+    gsSPVertex(GEPC_DL_PTR(verts3778), 16, 0),
     gsSP1Triangle(8, 9, 10, 0),
     gsSP1Triangle(8, 10, 11, 0),
     gsSP1Triangle(11, 15, 14, 0),
@@ -1377,7 +1397,7 @@ Gfx D_02004758[] = {
     gsSP1Triangle(4, 5, 6, 0),
     gsSP1Triangle(4, 6, 3, 0),
 
-    gsSPVertex(verts3878, 14, 0),
+    gsSPVertex(GEPC_DL_PTR(verts3878), 14, 0),
     gsSP1Triangle(7, 8, 9, 0),
     gsSP1Triangle(7, 9, 10, 0),
     gsSP1Triangle(11, 9, 8, 0),
@@ -1389,7 +1409,7 @@ Gfx D_02004758[] = {
     gsSP1Triangle(2, 3, 4, 0),
     gsSP1Triangle(2, 4, 5, 0),
 
-    gsSPVertex(verts3958, 16, 0),
+    gsSPVertex(GEPC_DL_PTR(verts3958), 16, 0),
     gsSP1Triangle(8, 9, 10, 0),
     gsSP1Triangle(8, 10, 11, 0),
     gsSP1Triangle(15, 14, 13, 0),
@@ -1403,7 +1423,7 @@ Gfx D_02004758[] = {
     gsSP1Triangle(3, 4, 5, 0),
     gsSP1Triangle(3, 5, 6, 0),
 
-    gsSPVertex(verts3A58, 16, 0),
+    gsSPVertex(GEPC_DL_PTR(verts3A58), 16, 0),
     gsSP1Triangle(8, 9, 10, 0),
     gsSP1Triangle(8, 10, 11, 0),
     gsSP1Triangle(8, 11, 15, 0),
@@ -1419,7 +1439,7 @@ Gfx D_02004758[] = {
     gsSP1Triangle(3, 4, 5, 0),
     gsSP1Triangle(3, 5, 6, 0),
 
-    gsSPVertex(verts3B58, 16, 0),
+    gsSPVertex(GEPC_DL_PTR(verts3B58), 16, 0),
     gsSP1Triangle(8, 9, 10, 0),
     gsSP1Triangle(8, 10, 11, 0),
     gsSP1Triangle(15, 11, 10, 0),
@@ -1435,7 +1455,7 @@ Gfx D_02004758[] = {
     gsSP1Triangle(5, 4, 3, 0),
     gsSP1Triangle(5, 3, 6, 0),
 
-    gsSPVertex(verts3C58, 16, 0),
+    gsSPVertex(GEPC_DL_PTR(verts3C58), 16, 0),
     gsSP1Triangle(8, 9, 10, 0),
     gsSP1Triangle(8, 10, 11, 0),
     gsSP1Triangle(15, 11, 10, 0),
@@ -1447,7 +1467,7 @@ Gfx D_02004758[] = {
     gsSP1Triangle(3, 4, 5, 0),
     gsSP1Triangle(3, 5, 6, 0),
 
-    gsSPVertex(verts3D58, 16, 0),
+    gsSPVertex(GEPC_DL_PTR(verts3D58), 16, 0),
     gsSP1Triangle(8, 9, 10, 0),
     gsSP1Triangle(8, 10, 11, 0),
     gsSP1Triangle(15, 14, 13, 0),
@@ -1461,7 +1481,7 @@ Gfx D_02004758[] = {
     gsSP1Triangle(5, 4, 3, 0),
     gsSP1Triangle(5, 3, 6, 0),
 
-    gsSPVertex(verts3E58, 16, 0),
+    gsSPVertex(GEPC_DL_PTR(verts3E58), 16, 0),
     gsSP1Triangle(8, 9, 10, 0),
     gsSP1Triangle(8, 10, 11, 0),
     gsSP1Triangle(11, 10, 15, 0),
@@ -1475,7 +1495,7 @@ Gfx D_02004758[] = {
     gsSP1Triangle(3, 2, 5, 0),
     gsSP1Triangle(3, 5, 6, 0),
 
-    gsSPVertex(verts3F58, 16, 0),
+    gsSPVertex(GEPC_DL_PTR(verts3F58), 16, 0),
     gsSP1Triangle(8, 9, 10, 0),
     gsSP1Triangle(8, 10, 11, 0),
     gsSP1Triangle(10, 9, 15, 0),
@@ -1489,7 +1509,7 @@ Gfx D_02004758[] = {
     gsSP1Triangle(5, 4, 3, 0),
     gsSP1Triangle(5, 3, 6, 0),
 
-    gsSPVertex(verts4058, 16, 0),
+    gsSPVertex(GEPC_DL_PTR(verts4058), 16, 0),
     gsSP1Triangle(8, 9, 10, 0),
     gsSP1Triangle(8, 10, 11, 0),
     gsSP1Triangle(8, 11, 15, 0),
@@ -1505,7 +1525,7 @@ Gfx D_02004758[] = {
     gsSP1Triangle(8, 4, 5, 0),
     gsSP1Triangle(8, 5, 6, 0),
 
-    gsSPVertex(verts4158, 16, 0),
+    gsSPVertex(GEPC_DL_PTR(verts4158), 16, 0),
     gsSP1Triangle(8, 9, 10, 0),
     gsSP1Triangle(8, 10, 11, 0),
     gsSP1Triangle(8, 11, 15, 0),
@@ -1517,7 +1537,7 @@ Gfx D_02004758[] = {
     gsSP1Triangle(3, 4, 5, 0),
     gsSP1Triangle(3, 5, 6, 0),
 
-    gsSPVertex(verts4258, 16, 0),
+    gsSPVertex(GEPC_DL_PTR(verts4258), 16, 0),
     gsSP1Triangle(8, 9, 10, 0),
     gsSP1Triangle(8, 10, 11, 0),
     gsSP1Triangle(8, 15, 14, 0),
@@ -1530,7 +1550,7 @@ Gfx D_02004758[] = {
     gsSP1Triangle(0, 2, 3, 0),
     gsSP1Triangle(4, 5, 6, 0),
 
-    gsSPVertex(verts4358, 9, 0),
+    gsSPVertex(GEPC_DL_PTR(verts4358), 9, 0),
     gsSP1Triangle(5, 6, 7, 0),
     gsSP1Triangle(5, 7, 8, 0),
     gsSP1Triangle(5, 8, 4, 0),
@@ -1967,3 +1987,66 @@ u32 D_02005FF0[] = {
 
 
 
+
+#ifdef GEPC
+#include "gfx_state.h"
+#include "platform.h"
+
+static void *const D_020043E8_ptrs[] = {
+    verts2B18,
+    verts2C18
+};
+
+static void *const DL_RAREWARETEXT_ptrs[] = {
+    verts2C18,
+    verts2CF8,
+    &imgRAre_0x0020,
+    &img_raRE_0x0AE0,
+    &imgWAre_0x15A0,
+    &imgwaRE_0x2060
+};
+
+static void *const D_02004758_ptrs[] = {
+    verts2CF8,
+    verts2DF8,
+    verts2EF8,
+    verts2FD8,
+    verts30D8,
+    verts31B8,
+    verts3298,
+    verts3398,
+    verts3498,
+    verts3598,
+    verts3678,
+    verts3778,
+    verts3878,
+    verts3958,
+    verts3A58,
+    verts3B58,
+    verts3C58,
+    verts3D58,
+    verts3E58,
+    verts3F58,
+    verts4058,
+    verts4158,
+    verts4258,
+    verts4358
+};
+
+/* Runs before main, so the lists are right before anything draws. */
+static void __attribute__((constructor)) rarewarelogo_bind_pointers(void)
+{
+    if (gfxPatchListPointers(D_020043E8, 4096, D_020043E8_ptrs,
+            (unsigned)(sizeof(D_020043E8_ptrs) / sizeof(D_020043E8_ptrs[0]))) < 0) {
+        platformPanic("rarewarelogo: D_020043E8 does not match its pointer table");
+    }
+    if (gfxPatchListPointers(DL_RAREWARETEXT, 4096, DL_RAREWARETEXT_ptrs,
+            (unsigned)(sizeof(DL_RAREWARETEXT_ptrs) / sizeof(DL_RAREWARETEXT_ptrs[0]))) < 0) {
+        platformPanic("rarewarelogo: DL_RAREWARETEXT does not match its pointer table");
+    }
+    if (gfxPatchListPointers(D_02004758, 4096, D_02004758_ptrs,
+            (unsigned)(sizeof(D_02004758_ptrs) / sizeof(D_02004758_ptrs[0]))) < 0) {
+        platformPanic("rarewarelogo: D_02004758 does not match its pointer table");
+    }
+}
+#endif

@@ -109,6 +109,12 @@ void init(void)
     s32 *stack_pointer;
     u8 *dataziprom;
 
+#ifndef GEPC
+    /* Decompressing the data segment out of the cartridge. On the PC the
+     * game's data is linked into the executable and is simply there, so there
+     * is nothing to inflate and nowhere to inflate it from -- RZIPLOADADDR is
+     * a fixed RDRAM address that means nothing here. The player's ROM is
+     * still read, but through port/src/romdata.c and on demand. */
     csegmentSegmentVaddrStart = get_csegmentSegmentStart();
     cdataSegmentRomStart = get_cdataSegmentRomStart();
     cdataSegmentRomSize = (u8 *) get_cdataSegmentRomEnd() - cdataSegmentRomStart;
@@ -135,8 +141,17 @@ void init(void)
         }
     }
 
+#endif
+
     osInitialize();
 
+#ifndef GEPC
+    /* Everything from here to the FPU control register is bare hardware: the
+     * TLB miss handler is copied to physical address zero, the TLB is unmapped
+     * entry by entry, and the caches are flushed by hand. Writing to K0BASE on
+     * a hosted platform is a segfault, not a no-op, so this is skipped rather
+     * than stubbed. The port has no TLB to miss and a cache it does not
+     * manage. */
     // This sets up TLB CONTEXT to allow the TLB miss handler to work
     initTLBPrepareContext();
 
@@ -165,6 +180,7 @@ void init(void)
     flags |= FPCSR_EZ; // enable division by zero
     flags |= FPCSR_EV; // enable invalid operation
     __osSetFpcCsr(flags);
+#endif
 
     stack_pointer = setSPToEnd(sp_main, sizeof(sp_main));
     osCreateThread(&mainThread, MAIN_THREAD_ID, &mainproc, NULL, stack_pointer, MAIN_THREAD_PRIORITY);
