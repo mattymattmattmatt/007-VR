@@ -17,6 +17,7 @@
 #include "bondconstants.h"
 #include "bondtypes.h"
 #include "game/bondview.h"
+#include "game/player.h"   /* g_CurrentPlayer */
 #include "game/lv.h"
 #include "game/options.h"
 #include "joy.h"
@@ -151,16 +152,15 @@ void gevr_shim_frame_end(void)
     g_vr.rendering = 0;
 }
 
-void gevr_shim_inject_pads(void)
+int gevr_shim_get_pads(OSContPad *out, int max)
 {
     gevr_game_state game;
     gevr_n64_pad pads[GEVR_PAD_COUNT];
     gevr_haptic_request haptics;
-    struct contsample *sample;
     int i;
 
-    if (!g_vr.active || !g_ContDataPtr) {
-        return;
+    if (!g_vr.active || !out || max <= 0) {
+        return 0;
     }
 
     /* The entire mapping assumes the engine is routing two pads the Goodhead
@@ -185,16 +185,16 @@ void gevr_shim_inject_pads(void)
     }
     g_vr.cam.body_yaw = g_vr.controls.body_yaw;
 
-    /* Write into the sample the accessors actually read. joyGetStickX and
-     * friends index samples[curlast], so anything written elsewhere in the
-     * ring is ignored. */
-    sample = &g_ContDataPtr->samples[g_ContDataPtr->curlast];
-
-    for (i = 0; i < GEVR_PAD_COUNT && i < MAXCONTROLLERS; i++) {
-        sample->pads[i].stick_x = pads[i].stick_x;
-        sample->pads[i].stick_y = pads[i].stick_y;
-        sample->pads[i].button = pads[i].buttons;
+    for (i = 0; i < GEVR_PAD_COUNT && i < max; i++) {
+        out[i].stick_x = pads[i].stick_x;
+        out[i].stick_y = pads[i].stick_y;
+        out[i].button = pads[i].buttons;
+        /* Spelled `errno`, genuinely: OSContPad predates that being a
+         * reserved name. Nothing here may include <errno.h>, or the macro
+         * eats the member. */
+        out[i].errno = 0;
     }
+    return i;
 }
 
 void gevr_shim_begin_eye(int eye)

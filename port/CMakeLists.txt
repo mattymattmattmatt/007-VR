@@ -244,6 +244,32 @@ endif()
 
 # --------------------------------------------------------------- GL backend
 
+# ------------------------------------------------------------------ the VR layer
+#
+# vr/ was built as its own project while the port did not exist yet. It does
+# now, so it comes in here -- but on its own terms: gevr_core is the control
+# mapping and the maths, with no windowing or headset dependency at all, and
+# gevr_runtime is the OpenXR half that only appears when a runtime is
+# installed.
+#
+# GE_VR is what activates the hooks in the game (joy.c injects the mapped pads,
+# fr.c takes the per-eye projection), and it is only defined when the runtime
+# is actually there. Without it the port builds and runs flat, which is what
+# the shim's own contract asks for: a missing or broken headset should not stop
+# the game starting. The N64 ROM build never defines it under any
+# circumstances, which is what keeps that build byte-for-byte unchanged.
+add_subdirectory("${GEPC_REPO_ROOT}/vr" "${CMAKE_CURRENT_BINARY_DIR}/vr")
+
+if(TARGET gevr_runtime)
+    set(GEPC_VR_ENABLED TRUE)
+    message(STATUS "ge007: VR enabled (OpenXR runtime found)")
+else()
+    set(GEPC_VR_ENABLED FALSE)
+    message(STATUS
+        "ge007: VR disabled -- no OpenXR runtime found. The game builds and "
+        "runs flat; install libopenxr-dev for the headset path.")
+endif()
+
 # ---------------------------------------------------------------- the game
 #
 # Until now nothing here compiled the game's own sources. The survey in
@@ -295,8 +321,23 @@ list(APPEND GEPC_GAME_SOURCES
 list(LENGTH GEPC_GAME_SOURCES GEPC_GAME_COUNT)
 message(STATUS "ge007: ${GEPC_GAME_COUNT} game translation units")
 
+if(GEPC_VR_ENABLED)
+    # Compiled here rather than in vr/, because it includes bondtypes.h and
+    # game/bondview.h alongside the VR headers -- it is the seam, so it needs
+    # both sides.
+    list(APPEND GEPC_GAME_SOURCES "${GEPC_REPO_ROOT}/vr/shim/gevr_shim.c")
+endif()
+
 add_library(ge007_game STATIC ${GEPC_GAME_SOURCES})
 target_link_libraries(ge007_game PUBLIC ge007_platform)
+
+if(GEPC_VR_ENABLED)
+    target_compile_definitions(ge007_game PUBLIC GE_VR)
+    target_include_directories(ge007_game PUBLIC
+        "${GEPC_REPO_ROOT}/vr/include"
+        "${GEPC_REPO_ROOT}/vr/shim")
+    target_link_libraries(ge007_game PUBLIC gevr_runtime)
+endif()
 
 # The game's sources are a 1997 codebase built by a compiler that warned about
 # far less. Their warnings are not actionable here and would bury the port's

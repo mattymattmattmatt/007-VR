@@ -9,7 +9,7 @@
  * Call order for one VR frame:
  *
  *   gevr_shim_frame_begin()      once, before the game ticks
- *   gevr_shim_inject_pads()      after joyConsumeSamplesWrapper()
+ *   gevr_shim_get_pads()         after joyConsumeSamplesWrapper()
  *   ... the game ticks as normal ...
  *   for each eye:
  *       gevr_shim_begin_eye(e)
@@ -25,6 +25,10 @@
 
 #ifdef GE_VR
 
+/* For OSContPad, which gevr_shim_get_pads fills. This header is only reached
+ * from game sources, which have the SDK headers available anyway. */
+#include <ultra64.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -39,11 +43,18 @@ int  gevr_shim_active(void);
 void gevr_shim_frame_begin(void);
 void gevr_shim_frame_end(void);
 
-/* Overwrites synthetic pads 0 and 1 in g_ContDataPtr with the VR-derived
- * state, so the engine's own 2.4 Goodhead path consumes them unchanged. Also
- * forces the current player's control style to Goodhead, because the whole
- * mapping depends on that routing. */
-void gevr_shim_inject_pads(void);
+/*
+ * Fills `out` with the VR-derived pads -- 0 aims, 1 moves -- and returns how
+ * many were written. Also forces the current player's control style to
+ * Goodhead, because the whole mapping depends on that routing.
+ *
+ * The caller writes them into its own controller state rather than this
+ * reaching in to do it. struct contdata is private to joy.c, and it should
+ * stay that way: the seam is "here are the pads", not "let me edit your
+ * ring buffer". Requires OSContPad, so include <ultra64.h> first -- joy.c
+ * already does.
+ */
+int gevr_shim_get_pads(OSContPad *out, int max);
 
 /* 0 = left, 1 = right. Between begin and end the swapchain image for that eye
  * is bound and the viewport is set. */
@@ -90,7 +101,7 @@ float gevr_shim_crouch_offset(void);
 #define gevr_shim_active()          (0)
 #define gevr_shim_frame_begin()     ((void)0)
 #define gevr_shim_frame_end()       ((void)0)
-#define gevr_shim_inject_pads()     ((void)0)
+#define gevr_shim_get_pads(o, n)    (0)
 #define gevr_shim_begin_eye(e)      ((void)0)
 #define gevr_shim_end_eye(e)        ((void)0)
 #define gevr_shim_current_eye()     (0)

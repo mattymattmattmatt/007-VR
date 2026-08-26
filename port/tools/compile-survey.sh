@@ -23,6 +23,11 @@ FLAGS=(
     -DVERSION_US -DLANG_US -DREFRESH_NTSC
     -DLEFTOVERDEBUG -DLEFTOVERSPECTRUM -DBUGFIX_R0 -DBYTEMATCH
     -Iport/include -include gepc_prelude.h
+    # The real build defines GE_VR whenever an OpenXR runtime is present, which
+    # activates the hooks in joy.c and fr.c. Measuring without it would put the
+    # survey and the build back out of step -- the same drift that once left
+    # GEPC undefined here for the whole port.
+    -DGE_VR -Ivr/include -Ivr/shim
     -idirafter . -idirafter include -idirafter include/PR
     -idirafter src -idirafter src/game -idirafter src/libultra
     -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0
