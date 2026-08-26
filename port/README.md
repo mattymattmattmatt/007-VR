@@ -16,7 +16,7 @@ ctest --test-dir build/port --output-on-failure
 | Piece | State |
 |---|---|
 | `src/system.c` — clock, sleep, paths, logging | **done** |
-| `src/rdram.c` — low-memory arena for game memory | **done, 40 assertions** |
+| `src/rdram.c` — low-memory arena for game memory | **done, 50 assertions** |
 | `src/libultra.c` — threads, message queues, timers | **done, 236 assertions** |
 | `src/libultra.c` — PI DMA against the ROM image | **done** |
 | `src/romdata.c` — assets from the player's ROM | **done, 53 assertions** |
@@ -241,8 +241,7 @@ geometry renders as garbage, so the shim **panics instead of truncating**.
 **The port builds 64-bit and confines game memory to a low arena.** Perfect
 Dark's port takes the other route and builds for i686; this one keeps the
 renderer, the OpenXR loader and the port itself 64-bit, and instead places
-everything the game can see inside the 8 MB arena in `src/rdram.c`, reserved
-below 4 GB (`MAP_32BIT` on Linux, a base-address walk on Windows). Game
+everything the game can see inside the 8 MB arena in `src/rdram.c`. Game
 pointers then fit in a `u32` naturally.
 
 That avoids multilib and the hunt for a 32-bit VR runtime, and leaves headroom
@@ -251,9 +250,48 @@ for stereo rendering. It also matches what the game already expects:
 block — whatever RDRAM is left over — and here that span is simply the tail of
 this arena, carved up by `mempCheckMemflagTokens` exactly as on hardware.
 
-If the arena cannot be placed low, the port refuses to start rather than
-corrupt display lists. `osVirtualToPhysical` keeps its panic as a backstop for
-port-side memory leaking into a game structure.
+If the arena cannot be placed where it belongs, the port refuses to start
+rather than corrupt display lists. `osVirtualToPhysical` keeps its panic as a
+backstop for port-side memory leaking into a game structure.
+
+#### Why the arena is reserved at link time
+
+The address is not a preference. `src/boss.c` finds the pool by taking the
+address of `_bssSegmentEnd`, which `--defsym` fixes at 0x800000 when the
+executable is linked, so the arena has to be exactly there. It also has to
+clear the executable — `-no-pie` loads that at 0x400000 — and end by 0x1000000
+or addresses near its top stop carrying segment index 0. Those constraints meet
+at one address and no other.
+
+The obvious way to get it is `mmap(MAP_FIXED_NOREPLACE)`, and that worked
+*almost* always — which is worse than not working. The kernel randomises the
+start of the brk heap to somewhere above the executable's data segment, over a
+range that covers 0x800000–0x1000000. Measured here, the heap landed inside
+the arena about eight times in a thousand; the mapping was then correctly
+refused and the game would not start, with nothing to distinguish that run from
+the many before it. It first appeared as a single test failure that passed on
+every retry, which is exactly how this class of bug hides.
+
+Nothing inside the process can fix it: the heap cannot be moved once the
+process exists. So `src/rdram_arena.S` reserves the range in the executable's
+own image instead, as an `@nobits` section placed by
+`--section-start=.gepc_rdram=0x800000`. The kernel derives the initial brk from
+the end of the last `PT_LOAD`, so the heap is now placed *above* the arena by
+construction, before `main()` runs. It costs nothing on disk — `@nobits` takes
+address space and no file space, and the pages arrive demand-zeroed, which is
+also what the game expects of hardware RDRAM.
+
+CMake detects this rather than assuming it: it links and *runs* a program to
+confirm the symbol really landed on the address, and falls back to the run-time
+mapping if the toolchain cannot do it (`-DGEPC_RDRAM_LINK_ARENA=OFF` forces the
+fallback). On the fallback path the failure now names what is in the way, read
+back out of `/proc/self/maps`, instead of just reporting that memory could not
+be reserved.
+
+Measured over 500 starts each: fallback 1 failure, link-time reservation 0.
+`ge007` itself: 0 in 300. The test asserts the structural property — that the
+heap begins at or after the end of the arena — rather than re-rolling the dice,
+because a one-in-a-few-hundred failure cannot be tested by running it again.
 
 Fast3D resolves *segmented* addresses through its own segment table, so this
 only has to cover direct pointers.

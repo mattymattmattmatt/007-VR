@@ -163,6 +163,66 @@ if(NOT MSVC AND NOT APPLE)
     target_compile_options(ge007_platform PUBLIC -fno-pie)
 endif()
 
+# Reserve the RDRAM arena in the executable's own image rather than mapping it
+# at run time.
+#
+# src/rdram_arena.S has the full reasoning. The short version: the arena must
+# be at 0x800000, mmap(MAP_FIXED_NOREPLACE) there succeeds about ninety-nine
+# times in a hundred, and the hundredth is the kernel having randomised the
+# brk heap into that range. Making the range part of the image moves the heap
+# above it by construction, because the kernel derives the initial brk from
+# the end of the last PT_LOAD segment.
+#
+# This is detected rather than assumed: it needs an assembler that takes
+# @nobits and a linker that takes --section-start, and both are checked by
+# actually linking a program and confirming the symbol landed on the address.
+# Where that fails the port falls back to mapping the arena at run time, which
+# is what it did before and still works -- just with the rare collision.
+option(GEPC_RDRAM_LINK_ARENA
+       "Reserve the RDRAM arena at link time where the toolchain allows it" ON)
+
+set(GEPC_RDRAM_LINKED OFF)
+if(GEPC_RDRAM_LINK_ARENA AND NOT MSVC AND NOT APPLE
+   AND CMAKE_SIZEOF_VOID_P GREATER 4)
+    include(CheckLanguage)
+    check_language(ASM)
+    if(CMAKE_ASM_COMPILER)
+        enable_language(ASM)
+        try_run(_gepc_arena_run _gepc_arena_build
+            "${CMAKE_CURRENT_BINARY_DIR}/arena_check"
+            SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_arena.c"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/src/rdram_arena.S"
+            LINK_OPTIONS -no-pie
+                         "-Wl,--section-start=.gepc_rdram=0x800000"
+            COMPILE_OUTPUT_VARIABLE _gepc_arena_log)
+        if(_gepc_arena_build AND _gepc_arena_run EQUAL 0)
+            set(GEPC_RDRAM_LINKED ON)
+        endif()
+    endif()
+endif()
+
+if(GEPC_RDRAM_LINKED)
+    # Its own target, and deliberately so. ge007_platform carries the whole
+    # compilation environment the game's sources need -- the -include prelude
+    # above all -- and none of it means anything to an assembler; feeding a
+    # .S file through `-include gepc_prelude.h` just preprocesses math.h into
+    # it. The arena is a link-time artefact and wants no compile environment
+    # at all.
+    add_library(ge007_rdram_arena STATIC src/rdram_arena.S)
+    target_link_libraries(ge007_platform PUBLIC ge007_rdram_arena)
+    target_compile_definitions(ge007_platform PUBLIC GEPC_RDRAM_LINKED=1)
+    target_link_options(ge007_platform PUBLIC
+                        "-Wl,--section-start=.gepc_rdram=0x800000")
+    message(STATUS
+        "ge007 port: RDRAM arena reserved at link time; the brk heap cannot "
+        "collide with it.")
+else()
+    message(STATUS
+        "ge007 port: RDRAM arena will be mapped at run time. Roughly one "
+        "start in a hundred can fail if the kernel randomises the heap into "
+        "0x800000-0x1000000; rdramInit explains it if that happens.")
+endif()
+
 if(NOT MSVC)
     target_compile_options(ge007_platform PRIVATE -Wall -Wextra)
     if(GEPC_WERROR)

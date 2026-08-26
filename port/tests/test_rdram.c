@@ -175,6 +175,126 @@ static void test_zeroed(void)
     CHECK(nonzero == 0);
 }
 
+/*
+ * The arena is at a fixed address, so the only way to lose it is for something
+ * else to be there first -- and something else was. The kernel randomises the
+ * start of the brk heap to somewhere above the executable's data segment, over
+ * a range that covers 0x800000-0x1000000, and a few runs in a thousand it
+ * landed inside the arena. mmap(MAP_FIXED_NOREPLACE) then correctly refused
+ * and the game would not start, with nothing to separate that run from the
+ * many before it.
+ *
+ * Re-running the old test until it passes proves nothing about a one-percent
+ * failure, and neither does checking that the heap missed the arena on this
+ * particular run -- in a build that got as far as this test, it did, or
+ * rdramInit would have failed.
+ *
+ * What is checked instead is the structure that makes the collision
+ * impossible. The kernel derives the initial brk from the end of the last
+ * PT_LOAD segment, so once the arena is reserved inside the executable's image
+ * the heap is placed *above* it, every time, before main() runs. That is a
+ * property of the layout rather than of the run, and one look at
+ * /proc/self/maps settles it.
+ */
+static void test_heap_cannot_reach_the_arena(void)
+{
+    unsigned long long base = (unsigned long long)(size_t)rdramBase();
+    unsigned long long end = base + rdramSize();
+    unsigned long long heap_start = 0, heap_end = 0;
+    FILE *f;
+    char line[512];
+    int straddles = 0;
+
+    printf("rdram: the heap is placed where it cannot reach the arena\n");
+
+    f = fopen("/proc/self/maps", "r");
+    if (!f) {
+        printf("  (no /proc/self/maps; skipped)\n");
+        return;
+    }
+
+    while (fgets(line, sizeof(line), f)) {
+        unsigned long long a, b;
+
+        if (sscanf(line, "%llx-%llx", &a, &b) != 2) {
+            continue;
+        }
+        if (strstr(line, "[heap]")) {
+            heap_start = a;
+            heap_end = b;
+        }
+        /* A mapping that crosses the arena's boundary cannot be the arena, so
+         * it is something that got in the way. */
+        if (b > base && a < end && (a < base || b > end)) {
+            straddles++;
+            printf("  straddles the arena: %s", line);
+        }
+    }
+    fclose(f);
+
+    CHECK(straddles == 0);
+
+    /* The heap has to exist for any of this to mean anything: the test has
+     * malloc'd by now, so an absent [heap] would mean glibc served it from
+     * mmap and the interesting case went untested. */
+    CHECK(heap_start != 0);
+    CHECK(heap_end > heap_start);
+
+#if defined(GEPC_RDRAM_LINKED)
+    /*
+     * The load-bearing assertion, and the one that separates a fixed build
+     * from a lucky one: the heap begins at or after the end of the arena.
+     * Without the link-time reservation the heap sits *below* 0x800000 on a
+     * good run and inside the arena on a bad one, so this fails there -- which
+     * is the point. Configure with -DGEPC_RDRAM_LINK_ARENA=OFF to see it.
+     */
+    CHECK(heap_start >= end);
+#else
+    /* Without the reservation nothing places the heap for us: getting this far
+     * only means it happened to miss this time. Say where it landed rather
+     * than reporting a pass that carries no guarantee. */
+    printf("  note: no link-time reservation, so this only means the heap "
+           "missed. It is at 0x%llx, the arena at 0x%llx-0x%llx.\n",
+           heap_start, base, end);
+#endif
+}
+
+/*
+ * The address is not a preference, it is the contract. boss.c finds the game's
+ * memory pool by taking the address of _bssSegmentEnd, which --defsym fixes at
+ * 0x800000 when the executable is linked. An arena anywhere else hands the
+ * pool memory nothing has mapped.
+ */
+static void test_arena_is_at_the_linked_address(void)
+{
+    unsigned long long base = (unsigned long long)(size_t)rdramBase();
+
+    printf("rdram: the arena is where the linker was told to put it\n");
+
+    CHECK(base == 0x800000ULL);
+
+    /* Both ends carry segment index 0, or a direct pointer near the top of
+     * the arena reads as a segmented address and resolves to nothing. */
+    CHECK(((base >> 24) & 0x0FULL) == 0ULL);
+    CHECK((((base + rdramSize() - 1) >> 24) & 0x0FULL) == 0ULL);
+
+#if defined(GEPC_RDRAM_LINKED)
+    /* Reserved in the image: writing to both ends must not fault, and the
+     * section must really be the size rdram.h claims. */
+    {
+        extern unsigned char gepcRdramArena[];
+
+        CHECK((void *)gepcRdramArena == rdramBase());
+        gepcRdramArena[0] = 0x5A;
+        gepcRdramArena[GEPC_RDRAM_SIZE - 1] = 0xA5;
+        CHECK(gepcRdramArena[0] == 0x5A);
+        CHECK(gepcRdramArena[GEPC_RDRAM_SIZE - 1] == 0xA5);
+        gepcRdramArena[0] = 0;
+        gepcRdramArena[GEPC_RDRAM_SIZE - 1] = 0;
+    }
+#endif
+}
+
 int main(void)
 {
     platformInit();
@@ -186,6 +306,8 @@ int main(void)
         printf("\nRDRAM unavailable; remaining tests skipped\n");
         return 1;
     }
+    test_arena_is_at_the_linked_address();
+    test_heap_cannot_reach_the_arena();
     test_round_trip();
     test_contains();
     test_alloc();

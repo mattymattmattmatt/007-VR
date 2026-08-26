@@ -193,6 +193,21 @@ void osDestroyThread(OSThread *t)
     pthread_mutex_unlock(&g_lock);
 }
 
+/*
+ * Declared here rather than included, because <sched.h> cannot reach glibc's
+ * from inside this build: port/include/sched.h deliberately intercepts the
+ * name and forwards it to the game's src/sched.h, which is what src/game/rsp.h
+ * means when it asks for it. Including <sched.h> here therefore pulls in
+ * OSSched and no POSIX at all, and sched_yield stays an implicit declaration
+ * -- which compiles, returns int by luck, and would break the moment anything
+ * cared.
+ *
+ * POSIX fixes this signature, so writing it out is safe. It is also the same
+ * answer the port already gives elsewhere: where a shim owns a standard
+ * header's name, code that wants the real one asks for the symbol directly.
+ */
+extern int sched_yield(void);
+
 void osYieldThread(void)
 {
     sched_yield();

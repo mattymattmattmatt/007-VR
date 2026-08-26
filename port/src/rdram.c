@@ -3,6 +3,7 @@
 #include "platform.h"
 
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -37,6 +38,13 @@
 #define GEPC_RDRAM_BASE     0x00800000u
 #define GEPC_RDRAM_MAX_END  0x01000000u   /* 16 MB: keeps segment index 0 */
 
+#if defined(GEPC_RDRAM_LINKED)
+/* Defined by src/rdram_arena.S and placed by --section-start. The size there
+ * has to match GEPC_RDRAM_SIZE; the check in rdramInit catches a mismatch in
+ * the address, and the assembler catches nothing, so keep the two together. */
+extern unsigned char gepcRdramArena[];
+#endif
+
 static unsigned char *g_base;
 static unsigned       g_size;
 static unsigned       g_used;
@@ -60,17 +68,54 @@ static int placement_is_valid(const void *p)
 
 static void release(void *p)
 {
-#if defined(_WIN32)
+#if defined(GEPC_RDRAM_LINKED)
+    /* Part of the executable's image; there is nothing to give back. */
+    (void)p;
+#elif defined(_WIN32)
     VirtualFree(p, 0, MEM_RELEASE);
 #else
     munmap(p, GEPC_RDRAM_SIZE);
 #endif
 }
 
+#if !defined(GEPC_RDRAM_LINKED) && !defined(_WIN32)
+/*
+ * When the mapping is refused, say what is in the way.
+ *
+ * The refusal is nearly always the brk heap: the kernel randomises its start
+ * to somewhere above the executable's data segment, and the range it can
+ * reach covers the arena. Reading it back out of /proc/self/maps turns "could
+ * not reserve memory" into something the reader can act on, and confirms the
+ * diagnosis rather than asserting it.
+ */
+static void report_obstruction(void)
+{
+    FILE *f = fopen("/proc/self/maps", "r");
+    char line[512];
+
+    if (!f) {
+        return;
+    }
+    while (fgets(line, sizeof(line), f)) {
+        unsigned long long a, b;
+
+        if (sscanf(line, "%llx-%llx", &a, &b) == 2
+            && b > GEPC_RDRAM_BASE && a < GEPC_RDRAM_BASE + GEPC_RDRAM_SIZE) {
+            size_t n = strlen(line);
+
+            while (n && (line[n - 1] == '\n' || line[n - 1] == '\r')) {
+                line[--n] = '\0';
+            }
+            platformLog("  in the way: %s", line);
+        }
+    }
+    fclose(f);
+}
+#endif
+
 int rdramInit(void)
 {
     void *p = NULL;
-    uintptr_t candidate;
 
     if (g_base) {
         return 0;
@@ -80,10 +125,33 @@ int rdramInit(void)
      * rests on. Static display lists live in the executable, not in here. */
     gepcAssertLowMemory();
 
-    /* One address, requested exactly and never merely hinted: a kernel that
-     * quietly relocated the mapping somewhere high would reintroduce the bug
-     * above, and anywhere other than GEPC_RDRAM_BASE would put the memory
-     * pool where _bssSegmentEnd does not point. */
+#if defined(GEPC_RDRAM_LINKED)
+    /*
+     * Reserved at link time by src/rdram_arena.S, so there is nothing to ask
+     * the kernel for: the range is already part of this executable's image
+     * and the heap was placed above it before main() ran. The check below
+     * still runs, because a linker that silently ignored --section-start
+     * would otherwise hand the game an arena at the wrong address.
+     */
+    p = (void *)gepcRdramArena;
+#else
+    uintptr_t candidate;
+
+    /*
+     * No link-time reservation available, so ask the kernel. One address,
+     * requested exactly and never merely hinted: a kernel that quietly
+     * relocated the mapping somewhere high would reintroduce the bug above,
+     * and anywhere other than GEPC_RDRAM_BASE would put the memory pool where
+     * _bssSegmentEnd does not point.
+     *
+     * This can lose. The kernel randomises the start of the brk heap above the
+     * executable's data segment, over a range wide enough to cover this one,
+     * so occasionally the arena is already spoken for by the time we ask.
+     * Nothing can be done about it from here -- the heap cannot be moved once
+     * the process exists -- which is exactly why the link-time reservation is
+     * preferred and why the failure below explains itself rather than just
+     * failing.
+     */
     for (candidate = GEPC_RDRAM_BASE;
          candidate == GEPC_RDRAM_BASE;
          candidate += GEPC_RDRAM_SIZE) {
@@ -119,12 +187,23 @@ int rdramInit(void)
     }
 
     if (!p) {
-        platformLog("could not reserve %u bytes of RDRAM below 16 MB.",
-                    GEPC_RDRAM_SIZE);
+        platformLog("could not reserve %u bytes of RDRAM at 0x%x.",
+                    GEPC_RDRAM_SIZE, GEPC_RDRAM_BASE);
         platformLog("game pointers must fit in a u32 and must carry segment "
                     "index 0, or display lists silently render nothing.");
+#  if !defined(_WIN32)
+        report_obstruction();
+        platformLog("this is usually the brk heap, which the kernel places at "
+                    "a randomised offset that can land in this range. Nothing "
+                    "in the process can move it, so simply starting again "
+                    "will normally work.");
+        platformLog("to remove the possibility entirely, build with the "
+                    "link-time arena: cmake -DGEPC_RDRAM_LINK_ARENA=ON, which "
+                    "is the default wherever the toolchain supports it.");
+#  endif
         return -1;
     }
+#endif
 
     if (!placement_is_valid(p)) {
         platformLog("RDRAM arena landed at %p, where addresses would be "
