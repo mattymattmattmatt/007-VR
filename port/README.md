@@ -29,23 +29,36 @@ ctest --test-dir build/port --output-on-failure
 | SP task interception | **done, 19 assertions** |
 
 | `src/audio.c` — AI output path | **done** |
-| `src/audio_abi.c` — software audio microcode | **first pass, 350 assertions** |
+| `src/audio_abi.c` — software audio microcode | **done, 350 assertions** |
 | `src/audio_sdl.c` — audio device | **builds, unrun** |
-| `src/input.c` | not started |
+| Input | `src/joy.c` drives `osCont*`; the VR layer feeds it |
+| `src/main.c` — entry point, standing in for `boot.s` | **done** |
+| `src/obseg.c` — ROM segment binding | **done** |
+| The game's own sources | **232 translation units compile and link** |
+| `ge007` | **links and starts**; stops at "no ROM to run" |
+| VR (`vr/`) | **wired in**, behind `GE_VR`, when an OpenXR runtime is found |
 
-Nothing here is wired into the game yet. The platform layer is built and
-tested on its own first, because a shim with subtly wrong queue semantics
-produces a game that boots and then deadlocks, which is miserable to debug
-later with a headset on.
+The platform layer was built and tested on its own before anything was wired
+into the game, because a shim with subtly wrong queue semantics produces a
+game that boots and then deadlocks, which is miserable to debug later with a
+headset on. That paid off: the layer owed the game nothing by the time the
+game was first linked against it.
+
+**The game has never been run.** It links, it starts, and it stops at the
+missing-ROM message, because no ROM exists in the environment this was built
+in. Everything past `init()` is therefore unexercised — see *What is not
+done* at the end of this file.
 
 ## Compiling the game's own sources
 
-The next milestone is building the 313 translation units in `src/` against
-this platform layer. `port/tools/compile-survey.sh` reports where that stands
-and groups whatever still fails by cause, so the remaining work stays
-measurable.
+Building `src/` against the platform layer was the next milestone after the
+layer itself. `port/tools/compile-survey.sh` reports where that stands and
+groups whatever still fails by cause, so the work stayed measurable. It is now
+finished — every translation unit compiles and the whole set links — but the
+findings below are worth keeping, because they are the ones most likely to
+recur in the parts of the codebase nobody has run yet.
 
-It went **42 -> 262 of 313** in one pass, and almost none of that was porting
+The first pass went **42 -> 262 of 313**, and almost none of that was porting
 work — it was three findings:
 
 **Include paths, not portability (42 -> 195).** The bulk of the early failures
@@ -79,9 +92,12 @@ the patch, strip the `# line` markers, and the token streams are identical.
 lines shift every line marker — worth knowing before concluding a guarded
 change has leaked.)
 
-The remaining 51 failures are a long tail rather than one blocker: struct
-members that have moved, a handful of undeclared identifiers, an
-`osSyncPrintf` arity mismatch, and some token-pasting in the model macros.
+The 51 that remained after that pass were a long tail rather than one
+blocker — struct members that had moved, undeclared identifiers, an
+`osSyncPrintf` arity mismatch, token-pasting in the model macros — and were
+cleared one group at a time. The commit history walks through them in order,
+and every edit to `src/` is guarded on `GEPC` and verified not to change the
+ROM build's token stream.
 
 ## What the platform layer still owes the game: nothing
 
@@ -524,3 +540,59 @@ big-endian on load, decided from the header magic rather than the extension.
 Unchanged from the rest of the repository: no assets are included or
 redistributed. The port will read them from the player's own ROM at runtime,
 the way Perfect Dark's port does.
+
+## What is not done
+
+The honest list, for whoever picks this up next.
+
+**The game has never been run.** This is the big one, and it dominates
+everything below. `ge007` links, starts, initialises RDRAM, and stops at the
+missing-ROM message — no GoldenEye ROM exists in the environment this was
+built in, so `init()` has never been called with real data behind it. Every
+milestone here was verified by unit tests, by pixel readback in
+`ge007-selftest`, or by the linker; none of it was verified by playing the
+game. Expect the first real boot to find bugs, and expect them to be
+concentrated in the paths listed below.
+
+The first boot is therefore the next task, and it needs a US (NTSC)
+GoldenEye 007 ROM. Nothing else is blocked on anything but that.
+
+**US ROM only.** `scripts/filelist.u.csv` is the manifest that drives both the
+runtime file table (`tools/gen_rom_manifest.py`) and the 59 linker `--defsym`
+segment symbols (`tools/gen_segment_defsyms.py`). `filelist.e.csv` (PAL) and
+`filelist.j.csv` (JP) exist in the repository and are not wired up. The build
+also hard-codes `VERSION_US LANG_US REFRESH_NTSC`. Adding PAL means selecting
+the manifest and those defines together — they have to agree, since the
+segment addresses come from the manifest and the game's layout expectations
+come from the defines.
+
+**The renderer is a first pass.** `gfx_gl.c` implements the colour combiner
+and the render modes that the self-test exercises. The combiner is verified
+end-to-end by reading pixels back, not by inspection, but the self-test drives
+a handful of modes and the game uses many more. Unimplemented or wrong modes
+will show as wrong colours or wrong blending rather than as errors.
+
+**One audio approximation remains.** The resampler carries its state correctly
+across buffers and is exact except for the interpolation kernel: the
+hardware's 64-phase filter coefficient table is not in this repository, so a
+four-point Catmull-Rom spline stands in. Pitched voices will differ from
+hardware in high-frequency detail. This was left deliberately rather than
+reproducing the table from memory, where a wrong table would be both hard to
+hear and impossible to attribute. `audio_sdl.c` builds but has never fed a
+real device.
+
+**Scheduling is not priority-preemptive.** The N64 always runs the
+highest-priority runnable thread; here the host scheduler decides and `OSPri`
+is advisory. Game code that depended on a lower-priority thread never running
+while a higher one was runnable can race. If the first boot hangs or behaves
+nondeterministically, this is the first place to look, and the fix is an
+explicit message-queue handshake rather than rebuilding a priority scheduler.
+
+**Not tried anywhere but Linux/x86-64.** `-no-pie`, the `--section-start`
+arena reservation, and the `--defsym` segment symbols are all GNU-toolchain
+mechanisms. The Windows and macOS paths in the source are written but unbuilt.
+
+**VR is built but unflown.** The OpenXR layer compiles and its control mapping
+is unit-tested, but it has never rendered to a headset, because that needs the
+game running first. The stereo path in particular — two eye passes through a
+renderer that has only ever drawn one — should be assumed unexercised.
