@@ -199,7 +199,9 @@ u8 m_IdleAnimations[] = {
         /*DEFAULT*/,,
             PlayAnimation(ANIM_yawning         , 0, 193, ANIM_IDLE_POSE_WHEN_COMPLETE | ANIM_PLAY_SFX, ANIM_DEFAULT_INTERPOLATION)
             BREAK,
-    )
+    
+        /* padded to SWITCH's declared arity; see below */
+        ,,,,,,,,,,,,,,,,,,,,,,,,,,,,,)
 #endif
     Return()
     EndList()
@@ -246,7 +248,9 @@ u8 m_BashKeyboard[] = {
         /*DEFAULT*/,,
             PlayAnimation(ANIM_keyboard_right_hand1, 0, 69, 0x00, ANIM_DEFAULT_INTERPOLATION)
             BREAK,
-    )
+    
+        /* padded to SWITCH's declared arity; see below */
+        ,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,)
 
     Return()
     EndList()};
@@ -311,7 +315,9 @@ u8 m_AttackBond[] = {
                IFNewRandomGreaterThan, 64,
                    TRYFiringRun,
                IFNewRandomGreaterThan,50,
-                   TRYFiringWalk,                     /* infinite ammo death sentence ;) */
+                   TRYFiringWalk,                     /* infinite ammo death sentence ;
+        /* padded to SWITCH's declared arity; see below */
+        ,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,) */
                IFNewRandomGreaterThan,25,
                    TRYSideRunning,
                IFNewRandomGreaterThan,10,
@@ -637,7 +643,9 @@ u8 m_RunToBondPersistent[] = {
                     TRYSidestepping,
                 /*DEFAULT*/,,
                     TRYThrowingGrenade,
-            )/*lblDone*/
+            
+        /* padded to SWITCH's declared arity; see below */
+        ,,,,,,,,,,,,,,,,,,,,,,,)/*lblDone*/
         #endif
             IFICouldSeeBond(lblNext)
             GotoNext(lblRunning)

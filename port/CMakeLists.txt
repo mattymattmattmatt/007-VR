@@ -52,12 +52,42 @@ target_include_directories(ge007_platform PUBLIC include)
 # a bare argument -- which silently drops src/ from the search path and lets
 # glibc's strings.h collide with PR/os.h again.
 target_compile_options(ge007_platform PUBLIC
+    "SHELL:-idirafter ${GEPC_REPO_ROOT}"
     "SHELL:-idirafter ${GEPC_REPO_ROOT}/include"
+    "SHELL:-idirafter ${GEPC_REPO_ROOT}/include/PR"
     "SHELL:-idirafter ${GEPC_REPO_ROOT}/src"
+    "SHELL:-idirafter ${GEPC_REPO_ROOT}/src/game"
+    "SHELL:-idirafter ${GEPC_REPO_ROOT}/src/libultra"
 )
 
 # PR/ultratypes.h declares nothing at all without this.
-target_compile_definitions(ge007_platform PUBLIC _LANGUAGE_C)
+#
+# The rest of this list is the game's own build configuration, and it has to
+# match what port/tools/compile-survey.sh measures with -- otherwise the survey
+# and the real build are compiling different code. They had in fact drifted:
+# GEPC was never defined here at all, so every guarded fix in the port was
+# inactive in this build and Gfx came out 16 bytes wide. The accessor test's
+# sizeof(Gfx) == 8 check is what caught it, which is exactly what that check is
+# for. Keep the two lists in step.
+#
+# GEPC marks the PC build wherever the game's sources need to differ from what
+# IDO accepted. The version defines mirror the Makefile's US target (see its
+# LCDEFS): without them bg.c pairs a four-argument call site against a
+# five-argument definition and several tables look absent. TARGET_N64 is
+# deliberately *not* set -- that would flip platform_info.h into N64 mode.
+target_compile_definitions(ge007_platform PUBLIC
+    _LANGUAGE_C
+    GEPC
+    VERSION_US LANG_US REFRESH_NTSC
+    LEFTOVERDEBUG LEFTOVERSPECTRUM BUGFIX_R0 BYTEMATCH
+)
+
+# gepc_prelude.h supplies what the shadowed repository headers used to carry --
+# the float constants, M_PI_F and friends, the generated BITFLAG arities. It is
+# force-included rather than added to each source, because the game's files
+# include it transitively through headers that cannot be edited freely.
+target_compile_options(ge007_platform PUBLIC
+    "SHELL:-include gepc_prelude.h")
 
 # The game builds its type hierarchy on `#define inherits struct`, so a child
 # record starts with an unnamed member carrying a tag:

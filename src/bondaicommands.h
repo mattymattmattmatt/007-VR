@@ -772,6 +772,62 @@ char *DOORSTATE_ToString[] = {
                   TEST_COMMAND, TEST_VALUE,
                       CASE_CONTENT,...)
  */
+/* SWITCH hands each case's content to EXPAND_ARGS_STACK, the DSL's C89
+ * stand-in for a variadic macro, and lets it take however many arguments that
+ * content happened to expand into. IDO filled the rest in as empty; C99 wants
+ * the declared count, so the PC build's copy pads those calls out.
+ *
+ * Padding a call to exactly its declared arity is neutral -- an explicitly
+ * empty argument and one the compiler filled in are the same value -- but
+ * here the content's own length is unknown, so the padding can overshoot and
+ * the macro takes a variadic tail to absorb that (see CPPLib.h). Whether IDO
+ * tolerated a surplus is not something this port can verify, so the ROM
+ * build's copy below is left exactly as it was rather than assuming it did.
+ *
+ * The two copies are generated from one source and differ only in the padding
+ * on those calls. Forwarding to a shared body instead would re-split the
+ * arguments as it substituted them, and most arguments in this DSL expand to
+ * text containing top-level commas, so they would be torn apart. */
+#ifdef GEPC
+#define SWITCH(VAR, \
+               CASE0, CASE_VAL0, CASE_CONTENT0,\
+               CASE1, CASE_VAL1, CASE_CONTENT1,\
+               CASE2, CASE_VAL2, CASE_CONTENT2,\
+               CASE3, CASE_VAL3, CASE_CONTENT3,\
+               CASE4, CASE_VAL4, CASE_CONTENT4,\
+               CASE5, CASE_VAL5, CASE_CONTENT5,\
+               CASE6, CASE_VAL6, CASE_CONTENT6,\
+               CASE7, CASE_VAL7, CASE_CONTENT7,\
+               CASE8, CASE_VAL8, CASE_CONTENT8,\
+               CASE9, CASE_VAL9, CASE_CONTENT9,\
+               CASEA, CASE_VALA, CASE_CONTENTA,\
+               CASEB, CASE_VALB, CASE_CONTENTB,\
+               CASEC, CASE_VALC, CASE_CONTENTC,\
+               CASED, CASE_VALD, CASE_CONTENTD,\
+               CASEE, CASE_VALE, CASE_CONTENTE,\
+               CASEF, CASE_VALF, CASE_CONTENTF)\
+VAR \
+IF_VA(NOT(IS_EMPTY(CASEF)))(0}; Error: Switch Limited to 15 elements + 1 default                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            \
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            \
+                                     /*This is here to stop the spread of errors*/u8 CASEF[] = {)\
+IF_VA(NOT(IS_EMPTY(CASE_CONTENTF)))(                                                    CASEE (CASE_VALE,lblNext) EXPAND_ARGS_STACK(CASE_CONTENTF,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,)(lblDone))\
+IF_VA(NOT(IS_EMPTY(CASE_CONTENTE)))(IF_VA(NOT(IS_EMPTY(CASE_CONTENTF)))(Label(lblNext)) CASED (CASE_VALD,lblNext) EXPAND_ARGS_STACK(CASE_CONTENTE,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,)(lblDone))\
+IF_VA(NOT(IS_EMPTY(CASE_CONTENTD)))(IF_VA(NOT(IS_EMPTY(CASE_CONTENTE)))(Label(lblNext)) CASEC (CASE_VALC,lblNext) EXPAND_ARGS_STACK(CASE_CONTENTD,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,)(lblDone))\
+IF_VA(NOT(IS_EMPTY(CASE_CONTENTC)))(IF_VA(NOT(IS_EMPTY(CASE_CONTENTD)))(Label(lblNext)) CASEB (CASE_VALB,lblNext) EXPAND_ARGS_STACK(CASE_CONTENTC,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,)(lblDone))\
+IF_VA(NOT(IS_EMPTY(CASE_CONTENTB)))(IF_VA(NOT(IS_EMPTY(CASE_CONTENTC)))(Label(lblNext)) CASEA (CASE_VALA,lblNext) EXPAND_ARGS_STACK(CASE_CONTENTB,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,)(lblDone))\
+IF_VA(NOT(IS_EMPTY(CASE_CONTENTA)))(IF_VA(NOT(IS_EMPTY(CASE_CONTENTB)))(Label(lblNext)) CASE9 (CASE_VAL9,lblNext) EXPAND_ARGS_STACK(CASE_CONTENTA,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,)(lblDone))\
+IF_VA(NOT(IS_EMPTY(CASE_CONTENT9)))(IF_VA(NOT(IS_EMPTY(CASE_CONTENTA)))(Label(lblNext)) CASE8 (CASE_VAL8,lblNext) EXPAND_ARGS_STACK(CASE_CONTENT9,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,)(lblDone))\
+IF_VA(NOT(IS_EMPTY(CASE_CONTENT8)))(IF_VA(NOT(IS_EMPTY(CASE_CONTENT9)))(Label(lblNext)) CASE7 (CASE_VAL7,lblNext) EXPAND_ARGS_STACK(CASE_CONTENT8,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,)(lblDone))\
+IF_VA(NOT(IS_EMPTY(CASE_CONTENT7)))(IF_VA(NOT(IS_EMPTY(CASE_CONTENT8)))(Label(lblNext)) CASE6 (CASE_VAL6,lblNext) EXPAND_ARGS_STACK(CASE_CONTENT7,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,)(lblDone))\
+IF_VA(NOT(IS_EMPTY(CASE_CONTENT6)))(IF_VA(NOT(IS_EMPTY(CASE_CONTENT7)))(Label(lblNext)) CASE5 (CASE_VAL5,lblNext) EXPAND_ARGS_STACK(CASE_CONTENT6,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,)(lblDone))\
+IF_VA(NOT(IS_EMPTY(CASE_CONTENT5)))(IF_VA(NOT(IS_EMPTY(CASE_CONTENT6)))(Label(lblNext)) CASE4 (CASE_VAL4,lblNext) EXPAND_ARGS_STACK(CASE_CONTENT5,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,)(lblDone))\
+IF_VA(NOT(IS_EMPTY(CASE_CONTENT4)))(IF_VA(NOT(IS_EMPTY(CASE_CONTENT5)))(Label(lblNext)) CASE3 (CASE_VAL3,lblNext) EXPAND_ARGS_STACK(CASE_CONTENT4,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,)(lblDone))\
+IF_VA(NOT(IS_EMPTY(CASE_CONTENT3)))(IF_VA(NOT(IS_EMPTY(CASE_CONTENT4)))(Label(lblNext)) CASE2 (CASE_VAL2,lblNext) EXPAND_ARGS_STACK(CASE_CONTENT3,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,)(lblDone))\
+IF_VA(NOT(IS_EMPTY(CASE_CONTENT2)))(IF_VA(NOT(IS_EMPTY(CASE_CONTENT3)))(Label(lblNext)) CASE1 (CASE_VAL1,lblNext) EXPAND_ARGS_STACK(CASE_CONTENT2,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,)(lblDone))\
+IF_VA(NOT(IS_EMPTY(CASE_CONTENT1)))(IF_VA(NOT(IS_EMPTY(CASE_CONTENT2)))(Label(lblNext)) CASE0 (CASE_VAL0,lblNext) EXPAND_ARGS_STACK(CASE_CONTENT1,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,)(lblDone))\
+IF_VA(NOT(IS_EMPTY(CASE_CONTENT0)))(IF_VA(NOT(IS_EMPTY(CASE_CONTENT1)))(Label(lblNext))                           EXPAND_ARGS_STACK(CASE_CONTENT0,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,)(lblDone) \
+Label(lblDone))
+#else
 #define SWITCH(VAR, \
                CASE0, CASE_VAL0, CASE_CONTENT0,\
                CASE1, CASE_VAL1, CASE_CONTENT1,\
@@ -810,6 +866,7 @@ IF_VA(NOT(IS_EMPTY(CASE_CONTENT2)))(IF_VA(NOT(IS_EMPTY(CASE_CONTENT3)))(Label(lb
 IF_VA(NOT(IS_EMPTY(CASE_CONTENT1)))(IF_VA(NOT(IS_EMPTY(CASE_CONTENT2)))(Label(lblNext)) CASE0 (CASE_VAL0,lblNext) EXPAND_ARGS_STACK(CASE_CONTENT1)(lblDone))\
 IF_VA(NOT(IS_EMPTY(CASE_CONTENT0)))(IF_VA(NOT(IS_EMPTY(CASE_CONTENT1)))(Label(lblNext))                           EXPAND_ARGS_STACK(CASE_CONTENT0)(lblDone) \
 Label(lblDone))
+#endif
 
 
  /**

@@ -402,6 +402,123 @@
  * _VA_ARGS_ for c89
  * Allows up to 32 Args on the stack
  */
+/* The DSL's stand-in for variadic macros under C89 -- see the comment above.
+ * Its callers hand it however many arguments a content expansion happened to
+ * produce, and IDO filled the rest in as empty. C99 requires the declared
+ * count exactly, in both directions, so the PC build takes a variadic tail to
+ * absorb a longer expansion; the call sites in bondaicommands.h are padded
+ * with empty arguments to cover a shorter one. Padding is neutral, because
+ * the body stops at the first empty argument either way -- an explicitly
+ * empty argument and one IDO filled in are the same value.
+ *
+ * The body is duplicated rather than shared, deliberately. Forwarding to a
+ * common macro would re-split the arguments as it substituted them, and in
+ * this DSL most arguments expand to text containing top-level commas, so they
+ * would be torn apart. The two copies differ only by the tail. */
+#ifdef GEPC
+#define EXPAND_ARGS_STACK(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,AA,AB,AC,AD,AE,AF,ERROR, ...) \
+IF_VA(NOT(IS_EMPTY(A)))/*
+*/(/*
+	*/A /*
+	*/IF_VA(NOT(IS_EMPTY(B)))/*
+	*/(/*
+		*/COMMA() B /*
+		*/IF_VA(NOT(IS_EMPTY(C)))/*
+		*/(/*
+			*/COMMA() C /*
+			*/IF_VA(NOT(IS_EMPTY(D)))/*
+			*/(/*
+				*/COMMA() D /*
+				*/IF_VA(NOT(IS_EMPTY(E)))/*
+				*/(/*
+					*/COMMA() E/*
+					*/IF_VA(NOT(IS_EMPTY(F)))/*
+					*/(/*
+						*/COMMA() F /*
+						*/IF_VA(NOT(IS_EMPTY(G)))/*
+						*/(/*
+							*/COMMA() G /*
+							*/IF_VA(NOT(IS_EMPTY(H)))/*
+							*/(/*
+								*/COMMA() H /*
+								*/IF_VA(NOT(IS_EMPTY(I)))/*
+								*/(/*
+									*/COMMA() I /*
+									*/IF_VA(NOT(IS_EMPTY(J)))/*
+									*/(/*
+										*/COMMA() J /*
+										*/IF_VA(NOT(IS_EMPTY(K)))/*
+										*/(/*
+											*/COMMA() K /*
+											*/IF_VA(NOT(IS_EMPTY(L)))/*
+											*/(/*
+												*/COMMA() L /*
+												*/IF_VA(NOT(IS_EMPTY(M)))/*
+												*/(/*
+													*/COMMA() M /*
+													*/IF_VA(NOT(IS_EMPTY(N)))/*
+													*/(/*
+														*/COMMA() N /*
+														*/IF_VA(NOT(IS_EMPTY(O)))/*
+														*/(/*
+															*/COMMA() O /*
+															*/IF_VA(NOT(IS_EMPTY(P)))/*
+															*/(/*
+																*/COMMA() P /*
+																*/IF_VA(NOT(IS_EMPTY(Q)))/*
+																*/(/*
+																	*/COMMA() Q /*
+																	*/IF_VA(NOT(IS_EMPTY(R)))/*
+																	*/(/*
+																		*/COMMA() R /*
+																		*/IF_VA(NOT(IS_EMPTY(S)))/*
+																		*/(/*
+																			*/COMMA() S /*
+																			*/IF_VA(NOT(IS_EMPTY(T)))/*
+																			*/(/*
+																				*/COMMA() T /*
+																				*/IF_VA(NOT(IS_EMPTY(U)))/*
+																				*/(/*
+																					*/COMMA() U /*
+																					*/IF_VA(NOT(IS_EMPTY(V)))/*
+																					*/(/*
+																						*/COMMA() V /*
+																						*/IF_VA(NOT(IS_EMPTY(W)))/*
+																						*/(/*
+																							*/COMMA() W /*
+																							*/IF_VA(NOT(IS_EMPTY(X)))/*
+																							*/(/*
+																								*/COMMA() X /*
+																								*/IF_VA(NOT(IS_EMPTY(Y)))/*
+																								*/(/*
+																									*/COMMA() Y /*
+																									*/IF_VA(NOT(IS_EMPTY(Z)))/*
+																									*/(/*
+																										*/COMMA() Z /*
+																										*/IF_VA(NOT(IS_EMPTY(AA)))/*
+																										*/(/*
+																											*/COMMA() AA /*
+																											*/IF_VA(NOT(IS_EMPTY(AB)))/*
+																											*/(/*
+																												*/COMMA() AB /*
+																												*/IF_VA(NOT(IS_EMPTY(AC)))/*
+																												*/(/*
+																													*/COMMA() AC /*
+																													*/IF_VA(NOT(IS_EMPTY(AD)))/*
+																													*/(/*
+																														*/COMMA() AD /*
+																														*/IF_VA(NOT(IS_EMPTY(AE)))/*
+																														*/(/*
+																															*/COMMA() AE /*
+																															*/IF_VA(NOT(IS_EMPTY(AF)))/*
+																															*/(/*
+																																*/COMMA() AF /*
+																																*/IF_VA(NOT(IS_EMPTY(ERROR)))/*
+																																*/(/*
+																																	*/COMMA() undefinedlocal = 1/0 "_VA_ARGS Stack full"/*
+																																*/)/*
+*/)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)
+#else
 #define EXPAND_ARGS_STACK(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,AA,AB,AC,AD,AE,AF,ERROR) \
 IF_VA(NOT(IS_EMPTY(A)))/*
 */(/*
@@ -504,6 +621,7 @@ IF_VA(NOT(IS_EMPTY(A)))/*
 																																	*/COMMA() undefinedlocal = 1/0 "_VA_ARGS Stack full"/*
 																																*/)/*
 */)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)	)
+#endif
 
 
 /**
